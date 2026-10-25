@@ -2,8 +2,8 @@
  * The minimal chrome (docs/ROADMAP.md, Phase 1) in a real browser, on a herdr of its own: the bar
  * holds the sidebar toggle and the tabs as pills and nothing else; the sidebar lists workspaces
  * only, under its top row's PC switcher and +; Ctrl+F opens the palette from the terminal; no pane opens a chat, even one that asked to;
- * the pane is drawn by restty (WebGPU, or WebGL2 where the browser has no WebGPU). Focus mode
- * (Mod+Shift+.) moves the tabs under their workspace, where a row moves by drag and by Alt+↑/↓, and a
+ * the pane is drawn by restty (WebGPU, or WebGL2 where the browser has no WebGPU). Focus mode is
+ * on by default (Mod+Shift+. toggles it): tabs live under their workspace, where a row moves by drag and by Alt+↑/↓, and a
  * sidebar hidden with Mod+B hands them back to the bar. A row dropped on another workspace's name
  * goes there, its shell still running; a workspace's last tab leaves a new shell behind it.
  * The top row's + makes a workspace at once, a shell in the PC's home, with no dialog.
@@ -36,7 +36,9 @@ let madeId: string | null = null;
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   await context.addInitScript((paneId) => {
-    localStorage.setItem("t-rex:settings", JSON.stringify({ language: "en" }));
+    if (localStorage.getItem("t-rex:settings") === null) {
+      localStorage.setItem("t-rex:settings", JSON.stringify({ language: "en" }));
+    }
     // a lens an older version remembered: the pane still opens in its terminal
     localStorage.setItem(`t-rex:view:${paneId}`, "chat");
   }, created.root_pane.pane_id);
@@ -44,7 +46,18 @@ try {
   await page.goto(`http://127.0.0.1:${server.port}/`);
   await page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-select`).click();
   const tabs = page.locator(".app-header .header-tabs [role=tab]");
+  const rows = page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-tab-select`);
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  await rows.nth(1).waitFor({ timeout: 20_000 });
+  assert.equal(await tabs.count(), 0, "focus mode is on by default: no pills in the bar");
+  assert.equal(await rows.count(), 2, "both tabs start under their workspace");
+
+  // Turning focus mode off is remembered when T-Rex opens again.
+  await page.keyboard.press(`${mod}+Shift+Period`);
+  await tabs.nth(1).waitFor({ timeout: 5_000 });
+  await page.reload();
   await tabs.nth(1).waitFor({ timeout: 20_000 });
+  assert.equal(await page.locator(".workspace-tab").count(), 0, "the saved opt-out survives a reload");
 
   // the bar: the toggle and the tabs, nothing else
   for (const gone of [".header-more-button", ".view-switch", ".palette-button", ".header-files-button", ".context-title"]) {
@@ -96,8 +109,6 @@ try {
   assert.equal(await page.locator(".chat-view, .composer").count(), 0, "Mod+Shift+J opens no chat");
 
   // focus mode (Mod+Shift+.): the tabs are rows under their workspace and the bar over the pane goes
-  const mod = process.platform === "darwin" ? "Meta" : "Control";
-  const rows = page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-tab-select`);
   await page.keyboard.press(`${mod}+Shift+Period`);
   await rows.nth(1).waitFor({ timeout: 5_000 });
   assert.equal(await tabs.count(), 0, "no pills in the bar in focus mode");

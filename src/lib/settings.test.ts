@@ -155,12 +155,22 @@ it("keeps sidebar rows on one line unless two lines were chosen", () => {
   }
 });
 
-it("keeps focus mode off until this device turns it on", () => {
-  expect(sanitizeSettings({}).focusMode).toBe(false);
-  expect(sanitizeSettings({ focusMode: true }).focusMode).toBe(true);
-  for (const focusMode of [null, "true", 1]) {
-    expect(sanitizeSettings({ focusMode }).focusMode).toBe(false);
-  }
+describe("focus mode", () => {
+  it("is on by default, including saved records without a valid choice", () => {
+    expect(DEFAULT_SETTINGS.focusMode).toBe(true);
+    expect(sanitizeSettings({}).focusMode).toBe(true);
+    for (const focusMode of [undefined, null, "true", "false", 0, 1]) {
+      expect(sanitizeSettings({ focusMode }).focusMode).toBe(true);
+    }
+  });
+
+  it("preserves this device's on/off choice across a saved-record round trip", () => {
+    for (const focusMode of [false, true]) {
+      const settings = sanitizeSettings({ focusMode });
+      expect(settings.focusMode).toBe(focusMode);
+      expect(sanitizeSettings(JSON.parse(JSON.stringify(settings))).focusMode).toBe(focusMode);
+    }
+  });
 });
 
 it("draws agent logos in their brand colors unless Mono was chosen", () => {
