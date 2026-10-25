@@ -583,6 +583,7 @@ Remote PC bundles are versioned on their own, as `remote-vN` tags (`remote-bundl
 | [`shared/`](../shared/) | HTTP/WebSocket contract and generated herdr types |
 | [`scripts/`](../scripts/) | Plugin lifecycle, type generation, remote bundles and browser checks |
 | [`public/`](../public/) | PWA manifest, service worker and icons |
+| [`macos/`](../macos/) | The Mac app: a Swift window on the bridge ([macos.md](macos.md)) |
 | [`docs/`](.) | Remote PCs, updates, screen sync (SSP), terminal input and brand assets |
 | [`demo/`](../demo/) | The browser demo's transport and fixtures |
 | [`DESIGN.md`](../DESIGN.md) | Design tokens and UI conventions |

@@ -5,6 +5,7 @@
  */
 import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { REMOTE_BUNDLE_VERSION } from "../shared/machines.ts";
 
@@ -56,11 +57,22 @@ rmSync(stage, { recursive: true, force: true });
 mkdirSync(join(stage, "bin"), { recursive: true });
 mkdirSync(downloads, { recursive: true });
 const digest = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+// each runtime once per machine, named by its checksum: a rebuild (the Mac app's, a second
+// platform) does not fetch it again, and a file whose bytes do not match is never used
+const cache = join(process.env["XDG_CACHE_HOME"] || join(homedir(), ".cache"), "t-rex", "downloads");
 async function download(url: string, sha256: string): Promise<Uint8Array> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(120_000) });
+  const cached = join(cache, sha256);
+  if (existsSync(cached)) {
+    const bytes = new Uint8Array(readFileSync(cached));
+    if (digest(bytes) === sha256) return bytes;
+  }
+  const response = await fetch(url, { signal: AbortSignal.timeout(600_000) });
   if (!response.ok) throw new Error(`Runtime download failed (${response.status}): ${url}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (digest(bytes) !== sha256) throw new Error(`Runtime checksum mismatch: ${url}`);
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(`${cached}.tmp`, bytes);
+  renameSync(`${cached}.tmp`, cached);
   return bytes;
 }
 function command(argv: string[], cwd = root): void {

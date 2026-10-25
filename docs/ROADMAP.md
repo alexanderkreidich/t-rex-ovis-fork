@@ -190,3 +190,6 @@ harness pass, and the old flow-control path is gone.
       ([development.md](development.md#releases)). Installed plugins are offered it.
 - [x] An Electron Mac app (#32) shipped in 0.1.0's release, then was removed with its downloads:
       a Mac app, if one comes, is native.
+- [ ] **Native Mac app** (`macos/`, [macos.md](macos.md)): Swift and AppKit with the system's
+      WebKit, the window drawn as the installed app is in Chrome, the bridge inside. A trial build
+      from a checkout so far: no release, no Intel build, no Developer ID.
