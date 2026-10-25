@@ -3,14 +3,15 @@
  * so the tab is carried over pane by pane with pane.move: its first pane opens a new tab there and
  * every other pane goes beside one already moved, splitting it as the tab was split. Each pane
  * keeps its terminal, so the shells and agents in it carry on. herdr closes the old tab once its
- * last pane has left, and the old workspace with it when that was its last tab.
+ * last pane has left. herdr would close the old workspace with its last tab: a new shell tab opens
+ * there first (in the folder the workspace's + would use), and the workspace stays.
  *
  * herdr refuses to move a pane out of a zoomed tab: the zoom is taken off first and put back on
  * the same pane in the new tab. A move that fails halfway leaves the panes moved so far in the new
  * tab: herdr has no transaction to undo them with.
  */
 import type { HerdrTab, PaneLayoutSnapshot, TabTransferred } from "../shared/protocol.ts";
-import { HerdrError, paneMove, paneZoom, sessionSnapshot, tabMove } from "./herdr/client.ts";
+import { HerdrError, paneMove, paneZoom, sessionSnapshot, tabCreate, tabMove } from "./herdr/client.ts";
 
 type Direction = "right" | "down";
 /** A tab's split tree: a pane, or a split whose first side gets `ratio` of it. */
@@ -101,8 +102,14 @@ export async function tabTransfer(tabId: string, workspaceId: string, insertInde
   if (!tree) throw new HerdrError("pane_layout_unavailable", `the layout of tab ${tabId} could not be read`);
   const plan = rebuildPlan(tree);
 
-  const place = snapshot.tabs.filter((candidate) => candidate.workspace_id === tab.workspace_id).indexOf(tab) + 1;
-  const label = givenLabel(tab, place);
+  const own = snapshot.tabs.filter((candidate) => candidate.workspace_id === tab.workspace_id);
+  const label = givenLabel(tab, own.indexOf(tab) + 1);
+  if (own.length === 1) {
+    const workspace = snapshot.workspaces.find((candidate) => candidate.workspace_id === tab.workspace_id);
+    const front = snapshot.panes.find((pane) => pane.pane_id === layout?.focused_pane_id);
+    const cwd = workspace?.worktree?.checkout_path ?? front?.cwd;
+    await tabCreate({ workspaceId: tab.workspace_id, ...(cwd ? { cwd } : {}) }, socketPath);
+  }
   const ids = new Map<string, string>();
   const opened = await paneMove(plan.first, { type: "new_tab", workspace_id: workspaceId, ...(label === undefined ? {} : { label }) }, socketPath);
   ids.set(plan.first, opened.pane.pane_id);

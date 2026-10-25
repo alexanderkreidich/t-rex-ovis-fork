@@ -36,11 +36,13 @@ The visible UI shrinks to a workspace list, one top bar of pill tabs and the ter
 - [x] **Focus mode** (`Mod+Shift+.`, the palette): from 769px with the sidebar shown, each
       workspace's tabs are rows under it (the pill's mark and name, the state in the status
       column; a tab with no agent reads dimmer) and the bar over the pane goes. A row moves among
-      its workspace's tabs by a mouse drag (an insertion line while it is held), by Alt+↑/↓ and from
-      its menu. Dropped among another workspace's rows or on its name, it goes into that workspace
-      (`POST /api/tab/transfer`: herdr's `pane.move` carries each pane over with its shell, and the
-      split layout with them; a workspace's last tab takes the workspace along). A hidden sidebar
-      hands the tabs back to the bar. A split view's halves keep their own strips.
+      its workspace's tabs by a mouse drag (the row rises and follows the pointer, the rows step
+      aside where it would land, and let go it stands in its new place while herdr makes the move,
+      gliding back if herdr refuses), by Alt+↑/↓ and from its menu. Dragged among another
+      workspace's rows, it goes into that workspace (`POST /api/tab/transfer`: herdr's `pane.move`
+      carries each pane over with its shell, and the split layout with them; a workspace's last tab
+      leaves a new shell behind, so the workspace stays). A hidden sidebar hands the tabs back to
+      the bar. A split view's halves keep their own strips.
 - [x] **PC switcher.** The sidebar shows one PC at a time. Its top row is a switcher (the PC's
       mark and name, a chevron with a point when another PC waits on you) whose menu lists the
       PCs, Manage for an SSH PC and Add PC, and a `+` for a new workspace at the row's far edge.

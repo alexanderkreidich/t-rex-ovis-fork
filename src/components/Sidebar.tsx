@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type AnimationEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Ellipsis, FolderOpen, GitBranch, Pencil, Pin, PinOff, Plus, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Ellipsis, FolderOpen, GitBranch, LoaderCircle, Pencil, Pin, PinOff, Plus, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
 
 import "./Sidebar.css";
 
@@ -80,6 +80,12 @@ export function RestoreErrorBadge({ reason }: { reason: string }) {
 function alignBreath(event: AnimationEvent<HTMLSpanElement>) {
   if (event.animationName !== "sidebar-breathe") return;
   for (const animation of event.currentTarget.getAnimations()) animation.startTime = 0;
+}
+
+/** a tab row's status cell while herdr makes the move it shows: a stepped spinner (Sidebar.css) */
+function MovingBadge() {
+  const t = useT();
+  return <span className="badge sidebar-status sidebar-status-moving" role="status" aria-label={t("Moving…")} title={t("Moving…")}><LoaderCircle aria-hidden="true" /></span>;
 }
 
 export function StatusBadge({ status, compact = false }: { status?: AgentStatus; compact?: boolean }) {
@@ -302,16 +308,13 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
 
   // focus mode's tab rows move by drag, by Alt+↑/↓ and from their menu, and by drag into another
   // workspace (lib/useTabRowDrag.ts)
-  const tabOrders = useMemo(() => {
-    const orders = new Map<string, string[]>();
-    for (const tab of snapshot?.tabs ?? []) orders.set(tab.workspace_id, [...(orders.get(tab.workspace_id) ?? []), tab.tab_id]);
-    return orders;
-  }, [snapshot?.tabs]);
   // the pane open when a tab went to another workspace stays open there, under the id herdr gave it
   const openPane = useRef(selectedPaneId);
   openPane.current = selectedPaneId;
   const openAtTransfer = useRef<string | null>(null);
-  const tabRows = useTabRowDrag({ owner: machineId, root: workspaceRoot, tabs: tabOrders, moveTab,
+  const tabRows = useTabRowDrag({ owner: machineId, root: workspaceRoot, tabs: snapshot?.tabs ?? [], moveTab,
+    openTabId: roster.find((pane) => pane.pane_id === selectedPaneId)?.tab_id ?? null,
+    panesOf: (tabId) => roster.filter((pane) => pane.tab_id === tabId),
     transferTab: (tabId, workspaceId, boundary) => {
       openAtTransfer.current = openPane.current;
       return transferTab(tabId, workspaceId, boundary);
@@ -595,7 +598,8 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
     const panes = roster.filter((pane) => pane.workspace_id === workspace.workspace_id);
     if (panes.length === 0) return null;
     const pane = currentPane(workspace, panes);
-    const selected = panes.some((candidate) => candidate.pane_id === selectedPaneId);
+    // the open tab on its way to another workspace is open there already (lib/useTabRowDrag.ts)
+    const selected = tabRows.carry?.open ? tabRows.carry.to === workspace.workspace_id : panes.some((candidate) => candidate.pane_id === selectedPaneId);
     const repoKey = workspace.worktree?.repo_key;
     const linked = workspace.worktree?.is_linked_worktree === true;
     const branch = branches.get(workspace.workspace_id);
@@ -749,7 +753,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
   };
 
   return (
-    <div className={`machine-workspaces${twoLine ? " is-two-line" : ""}${tabsUnder ? " is-focus" : ""}`} ref={workspaceRoot}>
+    <div className={`machine-workspaces${twoLine ? " is-two-line" : ""}${tabsUnder ? " is-focus" : ""}${tabRows.drag ? " is-tab-dragging" : ""}`} ref={workspaceRoot}>
       <nav className="sidebar-list" aria-label={t("Herdr workspaces")}>
         <>
           <p className={loadingWords === null ? "visually-hidden" : "tree-state"} role="status">{loadingWords}</p>
@@ -792,8 +796,8 @@ interface WorkspaceTabsProps {
   online: boolean;
   actions: AppActions;
   noteError: (message: string, workspaceId?: string, detail?: string | null) => void;
-  /** the list's one tab row drag, and the moves its menu and keys make */
-  rows: ReturnType<typeof useTabRowDrag>;
+  /** the list's one tab row drag, the moves its menu and keys make, and the move herdr has not shown yet */
+  rows: ReturnType<typeof useTabRowDrag<PaneInfo>>;
 }
 
 /**
@@ -801,7 +805,8 @@ interface WorkspaceTabsProps {
  * pill is (TabStrip): its pane's mark and the tab's name, and its state in the status cell every
  * sidebar row has. A tab with no agent in it is dimmer: nothing is at work there. A click opens the
  * pane the strip would; the strip's menu is a right-click, Shift+F10 or the context-menu key away,
- * F2 names a tab and Delete closes it. A drag moves a row, and so do Alt+↑/↓ and the menu.
+ * F2 names a tab and Delete closes it. A drag moves a row, and so do Alt+↑/↓ and the menu; a moved
+ * row stands in its new place while herdr makes the move.
  */
 function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, actions, noteError, rows }: WorkspaceTabsProps) {
   const t = useT();
@@ -817,11 +822,17 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
   // what is open now, for a close that answers after another pane was opened
   const selected = useRef(selectedPaneId);
   selected.current = selectedPaneId;
-  const tabs = snapshot.tabs.filter((tab) => tab.workspace_id === workspace.workspace_id);
-  const panesOf = (tab: HerdrTab): PaneInfo[] => panes.filter((pane) => pane.tab_id === tab.tab_id);
+  const tabs = rows.shown(workspace.workspace_id);
+  const herdrTabs = snapshot.tabs.filter((tab) => tab.workspace_id === workspace.workspace_id);
+  // a tab moved in from another workspace brings its panes along until herdr's order shows it here
+  const carry = rows.carry;
+  const carriedHere = carry !== null && carry.to === workspace.workspace_id && carry.from !== carry.to;
+  const rowPanes = carriedHere ? [...panes, ...carry.panes] : panes;
+  const panesOf = (tab: HerdrTab): PaneInfo[] => rowPanes.filter((pane) => pane.tab_id === tab.tab_id);
   const paneFor = (tab: HerdrTab): PaneInfo | undefined => tabPane(panesOf(tab), lastViewedPane("tab", machineId, tab.tab_id),
     snapshot.layouts?.find((layout) => layout.tab_id === tab.tab_id)?.focused_pane_id);
-  const placeOf = (tab: HerdrTab): number => tabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1;
+  // herdr's place, which its names of unnamed tabs count: the rows may show a move it has not made yet
+  const placeOf = (tab: HerdrTab): number => carry?.tabId === tab.tab_id ? carry.place : herdrTabs.findIndex((candidate) => candidate.tab_id === tab.tab_id) + 1;
   // as the strip names a tab: the name it was given, else what runs in it, else its place
   const nameOf = (tab: HerdrTab): string => {
     if (sent?.tabId === tab.tab_id) return sent.label;
@@ -854,7 +865,7 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
   // tabs that arrive while the rows are on screen enter (Sidebar.css); the ones there when focus mode
   // came on are just there
   const seen = useRef<ReadonlySet<string> | null>(null);
-  const arrived = (tabId: string): boolean => seen.current !== null && !seen.current.has(tabId);
+  const arrived = (tabId: string): boolean => seen.current !== null && !seen.current.has(tabId) && !rows.arrivedByMove(tabId);
   useLayoutEffect(() => {
     seen.current = new Set(tabs.map((tab) => tab.tab_id));
   });
@@ -963,19 +974,21 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
 
   return (
     <>
-      <ul ref={list} className="workspace-tabs" data-workspace={workspace.workspace_id} aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} aria-busy={rows.moving} onKeyDown={onKeyDown}>
+      <ul ref={list} className="workspace-tabs" data-workspace={workspace.workspace_id} aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} aria-busy={rows.moving} onKeyDown={onKeyDown}
+        data-vacated={rows.drag?.away && rows.drag.workspaceId === workspace.workspace_id ? t("New shell") : undefined}>
         {tabs.map((tab, index) => {
           const own = panesOf(tab);
           const pane = paneFor(tab);
           if (!pane) return null;
           const name = nameOf(tab);
-          const open = own.some((candidate) => candidate.pane_id === selectedPaneId);
+          const carried = carry?.tabId === tab.tab_id;
+          // herdr moves the open pane before it answers: the moved row stays the open one meanwhile
+          const open = carry?.open ? carried : own.some((candidate) => candidate.pane_id === selectedPaneId);
           const quiet = !own.some((candidate) => candidate.agent);
           const status = online ? rollupStatus(own.map((candidate) => activity.status(machineId, candidate))) : undefined;
-          const target = rows.drag?.target?.workspaceId === workspace.workspace_id ? rows.drag.target.boundary : null;
           return (
-            <li key={tab.tab_id} className={`workspace-tab${open ? " is-selected" : ""}${quiet ? " is-quiet" : ""}${arrived(tab.tab_id) ? " is-new" : ""}${rows.drag?.tabId === tab.tab_id ? " is-dragging" : ""}`}
-              data-index={index} data-drop={target === index ? "before" : target === tabs.length && index === tabs.length - 1 ? "after" : undefined}>
+            <li key={tab.tab_id} className={`workspace-tab${open ? " is-selected" : ""}${quiet ? " is-quiet" : ""}${arrived(tab.tab_id) ? " is-new" : ""}${rows.drag?.tabId === tab.tab_id ? " is-lifted" : ""}${carried ? " is-carried" : ""}`}
+              data-key={tab.tab_id} data-index={index}>
               {editing?.tabId === tab.tab_id ? (
                 <input
                   className="input workspace-tab-rename"
@@ -1011,7 +1024,8 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
                   onPointerUp={rows.onPointerUp}
                   onPointerCancel={rows.cancelDrag}
                   onLostPointerCapture={rows.cancelDrag}
-                  onClick={(event) => { if (!rows.consumeClick(event.detail) && !event.ctrlKey) actions.selectPane(pane.pane_id); }}
+                  // a row on its way has panes on their way too: it opens once herdr has moved them
+                  onClick={(event) => { if (!rows.consumeClick(event.detail) && !event.ctrlKey && !carried) actions.selectPane(pane.pane_id); }}
                   onDoubleClick={() => beginRename(tab)}
                   onContextMenu={(event) => openMenu(event, tab)}
                   // the middle button closes a tab, as it does a browser's
@@ -1019,12 +1033,20 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
                 >
                   <span className="workspace-tab-mark" aria-hidden="true">{pane.agent ? <AgentMark agent={pane.agent} size={14} /> : <SquareTerminal />}</span>
                   <span className="workspace-tab-name">{name}</span>
-                  {online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : <StatusBadge compact status={status} />}
+                  {carried ? <MovingBadge /> : online && pane.restore_error ? <RestoreErrorBadge reason={pane.restore_error} /> : <StatusBadge compact status={status} />}
                 </button>
               )}
             </li>
           );
         })}
+        {/* its last tab gone, a workspace keeps a new shell the bridge opens first (server/tab-transfer.ts) */}
+        {carry && carry.from === workspace.workspace_id && carry.to !== carry.from && tabs.length === 0 && <li className="workspace-tab is-quiet is-placeholder">
+          <span className="workspace-tab-select">
+            <span className="workspace-tab-mark" aria-hidden="true"><SquareTerminal /></span>
+            <span className="workspace-tab-name">{t("New shell")}</span>
+            <MovingBadge />
+          </span>
+        </li>}
       </ul>
       {menu && <RowMenu anchor={menu.anchor} point={menu.point} restoreFocusTo={menu.previousFocus} title={nameOf(menu.tab)} items={menuItems(menu.tab)} align="start" onClose={() => setMenu(null)} />}
       {confirm && <ConfirmDialog title={confirm.title} body={confirm.body} confirmLabel={t("Close tab")} onConfirm={async () => { await close(confirm.tab); setConfirm(null); }} onClose={() => setConfirm(null)} />}

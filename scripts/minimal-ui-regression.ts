@@ -5,7 +5,7 @@
  * the pane is drawn by restty (WebGPU, or WebGL2 where the browser has no WebGPU). Focus mode
  * (Mod+Shift+.) moves the tabs under their workspace, where a row moves by drag and by Alt+↑/↓, and a
  * sidebar hidden with Mod+B hands them back to the bar. A row dropped on another workspace's name
- * goes there, its shell still running; a workspace's last tab takes the workspace with it.
+ * goes there, its shell still running; a workspace's last tab leaves a new shell behind it.
  * The top row's + makes a workspace at once, a shell in the PC's home, with no dialog.
  * Each pane is a rounded card whose title bar carries Split right, Split down, Zoom and Close; a
  * card dragged by its title onto another of its tab trades places with it in herdr. Mod+D from the
@@ -108,8 +108,9 @@ try {
   await rows.nth(1).click();
   await page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-tab.is-selected .workspace-tab-select`).nth(0).waitFor();
   assert.equal(await rows.nth(1).getAttribute("aria-current"), "true", "a row opens its tab's pane");
-  // a row dragged below the other takes its place in herdr, a line saying where while it is held;
-  // the drag opens nothing, and Alt+↑ moves it back with the focus kept on it
+  // a row dragged below the other rises and follows the pointer while the other steps up into its
+  // place, and takes that place in herdr; the drag opens nothing, and Alt+↑ moves it back with the
+  // focus kept on it
   const order = () => rows.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-tab-id")));
   const ordered = (want: (string | null)[]) => page.waitForFunction(({ selector, want }) => JSON.stringify([...document.querySelectorAll(selector)].map((button) => button.getAttribute("data-tab-id"))) === want,
     { selector: `.workspace-group[data-workspace="${workspaceId}"] .workspace-tab-select`, want: JSON.stringify(want) }, { timeout: 5_000 });
@@ -119,11 +120,15 @@ try {
   await page.mouse.move(upper.x + upper.width / 2, upper.y + upper.height / 2);
   await page.mouse.down();
   await page.mouse.move(upper.x + upper.width / 2, lower.y + lower.height * 0.8, { steps: 6 });
-  await page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-tab:last-child[data-drop="after"]`).waitFor({ timeout: 5_000 });
-  assert.equal(await page.locator(".workspace-tab.is-dragging").count(), 1, "the held row is marked");
+  await page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-tab.is-lifted`).waitFor({ timeout: 5_000 });
+  const stepped = `.workspace-group[data-workspace="${workspaceId}"] .workspace-tab:not(.is-lifted)`;
+  await page.waitForFunction(({ selector, half }) => {
+    const row = document.querySelector(selector);
+    return row !== null && new DOMMatrix(getComputedStyle(row).transform).m42 < -half;
+  }, { selector: stepped, half: lower.height / 2 }, { timeout: 5_000 }).catch(() => assert.fail("the other row steps up into the held one's place"));
   await page.mouse.up();
   await ordered([before[1]!, before[0]!]);
-  assert.equal(await page.locator(".workspace-tab.is-dragging, .workspace-tab[data-drop]").count(), 0, "the line goes with the drop");
+  await page.locator(".workspace-tab.is-lifted, .workspace-tab.is-carried").first().waitFor({ state: "detached", timeout: 5_000 });
   assert.equal(await page.locator(`.workspace-tab-select[aria-current="true"]`).getAttribute("data-tab-id"), before[1], "the drag opened nothing");
   await rows.nth(1).focus();
   await page.keyboard.press("Alt+ArrowUp");
@@ -193,21 +198,26 @@ try {
   assert.equal(madePanes[0]!.agent ?? null, null, "no agent starts in it");
   const madeTerminal = madePanes[0]!.terminal_id;
 
-  // in focus mode, the new workspace's one tab dropped on the first workspace's name goes there,
-  // first among its tabs: the new workspace closes with its last tab, the tab stays open, and the
-  // shell in it is the same one, still taking input
+  // in focus mode, the new workspace's one tab dragged over the first workspace's first row goes
+  // there, first among its tabs, its place saying the new shell that keeps the new workspace; the
+  // tab stays open, the shell in it is the same one, still taking input, and the new workspace has
+  // a shell of its own
   await page.keyboard.press(`${mod}+Shift+Period`);
   const lone = page.locator(`.workspace-group[data-workspace="${madeId}"] .workspace-tab-select`);
   await lone.waitFor({ timeout: 5_000 });
+  const lonelyTab = await lone.getAttribute("data-tab-id");
   const into = page.locator(`.workspace-group[data-workspace="${workspaceId}"]`);
-  const [held, name] = [await lone.boundingBox(), await into.locator(".workspace-header").boundingBox()];
-  assert.ok(held && name);
+  const [held, firstRow] = [await lone.boundingBox(), await into.locator(".workspace-tab-select").first().boundingBox()];
+  assert.ok(held && firstRow);
   await page.mouse.move(held.x + held.width / 2, held.y + held.height / 2);
   await page.mouse.down();
-  await page.mouse.move(name.x + name.width / 2, name.y + name.height / 2, { steps: 8 });
-  await into.locator('.workspace-tab:first-child[data-drop="before"]').waitFor({ timeout: 5_000 });
+  await page.mouse.move(firstRow.x + firstRow.width / 2, firstRow.y + firstRow.height / 4, { steps: 8 });
+  await page.locator(`.workspace-group[data-workspace="${madeId}"] .workspace-tabs[data-vacated]`).waitFor({ timeout: 5_000 });
   await page.mouse.up();
-  await page.locator(`.workspace-group[data-workspace="${madeId}"]`).waitFor({ state: "detached", timeout: 10_000 });
+  await page.waitForFunction(({ selector, gone }) => {
+    const ids = [...document.querySelectorAll(selector)].map((button) => button.getAttribute("data-tab-id"));
+    return ids.length === 1 && !ids.includes(gone);
+  }, { selector: `.workspace-group[data-workspace="${madeId}"] .workspace-tab-select[data-tab-id]`, gone: lonelyTab }, { timeout: 10_000 });
   const first = into.locator(".workspace-tab-select").first();
   await page.waitForFunction((selector) => document.querySelector(selector)?.getAttribute("aria-current") === "true",
     `.workspace-group[data-workspace="${workspaceId}"] .workspace-tab:first-child .workspace-tab-select`, { timeout: 10_000 });
@@ -216,7 +226,9 @@ try {
   const moved = session.panes.find((pane) => pane.tab_id === openTab);
   assert.ok(moved, "the moved tab has its pane");
   assert.equal(moved.terminal_id, madeTerminal, "the same shell, under the pane's new id");
-  madeId = null;
+  const keptTab = await lone.getAttribute("data-tab-id");
+  const kept = session.panes.find((pane) => pane.tab_id === keptTab);
+  assert.ok(kept && kept.terminal_id !== madeTerminal, "the new workspace keeps a shell of its own");
   await page.locator(".pane-frame[data-layout-pane]:not(.is-hidden) .terminal-ime").first().focus();
   await page.keyboard.type("echo t-rex-moved-$((6*7))\n");
   for (let deadline = Date.now() + 10_000; ; await page.waitForTimeout(200)) {

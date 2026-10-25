@@ -405,7 +405,7 @@ describe("tab transfer", () => {
     }
   });
 
-  it("puts a zoom back on its pane, and a workspace's last tab takes the workspace with it", async () => {
+  it("puts a zoom back on its pane, and leaves a new shell in the workspace its last tab left", async () => {
     const from = await workspaceCreate({ cwd: tmpdir(), label: "t-rex-test-transfer-zoomed" });
     const to = await workspaceCreate({ cwd: tmpdir(), label: "t-rex-test-transfer-into" });
     try {
@@ -417,7 +417,15 @@ describe("tab transfer", () => {
       const moved = await response.json() as TabTransferred;
       expect(moved.tabs.map((entry) => entry.tab_id)).toEqual([to.tab.tab_id, moved.tab_id]);
       const after = await sessionSnapshot();
-      expect(after.workspaces.some((workspace) => workspace.workspace_id === from.workspace.workspace_id)).toBe(false);
+      expect(after.workspaces.some((workspace) => workspace.workspace_id === from.workspace.workspace_id)).toBe(true);
+      const kept = after.tabs.filter((entry) => entry.workspace_id === from.workspace.workspace_id);
+      expect(kept.map((entry) => entry.tab_id)).not.toContain(from.tab.tab_id);
+      expect(kept).toHaveLength(1);
+      // a new shell, in the folder the moved tab worked in, not one of the moved ones
+      const shell = after.panes.filter((pane) => pane.tab_id === kept[0]!.tab_id);
+      expect(shell).toHaveLength(1);
+      expect(shell[0]!.cwd).toBe(after.panes.find((pane) => pane.pane_id === moved.pane_ids[right.pane_id])!.cwd);
+      expect(Object.values(moved.pane_ids)).not.toContain(shell[0]!.pane_id);
       const layout = layoutOf(after, moved.tab_id);
       expect(layout.zoomed).toBe(true);
       expect(layout.focused_pane_id).toBe(moved.pane_ids[right.pane_id]!);

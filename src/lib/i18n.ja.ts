@@ -703,6 +703,8 @@ export const JA: Record<string, string> = {
   "Move tab right": "タブを右に移動",
   "Move tab up": "タブを上に移動",
   "Move tab down": "タブを下に移動",
+  "New shell": "新しいシェル",
+  "Moving…": "移動中…",
   "Tab order did not refresh. Try again.": "タブの順序が更新されませんでした。もう一度お試しください。",
   "Jump to bottom": "一番下へ移動",
   "Scroll failed: {reason}": "スクロールに失敗しました: {reason}",

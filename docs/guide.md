@@ -410,7 +410,7 @@ Optional integrations and the updater have separate network behavior. See [the s
 | `Mod+Shift+PageUp` / `PageDown` | Scroll the current pane up / down, retaining one line |
 | `Mod+B` | Toggle sidebar (`Mod+Shift+B` too) |
 | `Mod+D` | Split the current pane right |
-| `Mod+Shift+.` | Focus mode: each workspace's tabs as rows under it in the sidebar, no bar over the pane (a hidden sidebar hands the tabs back to the bar). Drag a row to reorder it, or onto another workspace's rows or name to move the tab there with its shells and splits |
+| `Mod+Shift+.` | Focus mode: each workspace's tabs as rows under it in the sidebar, no bar over the pane (a hidden sidebar hands the tabs back to the bar). Drag a row to reorder it, or among another workspace's rows to move the tab there with its shells and splits; the other rows make room as you drag, and a workspace whose last tab you move keeps a new shell |
 | `Mod+Shift+O` | New workspace (`Mod+Shift+N` too, in the installed app: a Chrome tab keeps `Ctrl+Shift+N` for an incognito window) |
 | `Mod+Shift+↑` / `↓` | Previous / next pane |
 | `Mod+Shift+,` | Settings |
