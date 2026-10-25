@@ -8,9 +8,10 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
 import { MAX_LABEL_CHARS } from "../shared/labels.ts";
-import type { DirectoryCreated, ServerMessage, TabMoved } from "../shared/protocol.ts";
+import type { DirectoryCreated, ServerMessage, TabMoved, TabTransferred } from "../shared/protocol.ts";
 import { agentFault, agentLaunch, type AgentPayload } from "./agent-launch.ts";
 import { createDirectory, listDirectories } from "./directories.ts";
+import { tabTransfer } from "./tab-transfer.ts";
 import { HerdrError, tabClose, tabCreate, tabMove, tabRename, workspaceClose, workspaceCreate, workspaceMove, workspaceRename, worktreeCreate, worktreeList, worktreeOpen, worktreeRemove } from "./herdr/client.ts";
 import { badRequest, conflictResponse, errorResponse, isJsonObject, jsonResponse, readJsonObject } from "./http.ts";
 
@@ -236,15 +237,21 @@ export async function handleWorkspaceRequest(request: Request, url: URL, pathnam
   }
 
   // herdr's prefix+shift+t and prefix+shift+x: a tab's name, and a tab closed with every pane in it
-  if (pathname === "/api/tab/rename" || pathname === "/api/tab/close" || pathname === "/api/tab/move") {
+  if (pathname === "/api/tab/rename" || pathname === "/api/tab/close" || pathname === "/api/tab/move" || pathname === "/api/tab/transfer") {
     if (request.method !== "POST") return badRequest("method_not_allowed", "use POST");
-    const payload = await readJsonObject<{ tab_id?: unknown; label?: unknown; insert_index?: unknown }>(request);
+    const payload = await readJsonObject<{ tab_id?: unknown; label?: unknown; insert_index?: unknown; workspace_id?: unknown }>(request);
     if (payload instanceof Response) return payload;
     if (typeof payload.tab_id !== "string" || payload.tab_id.length === 0) return badRequest("missing_tab_id", "tab_id is required");
-    if (pathname === "/api/tab/move" && (typeof payload.insert_index !== "number" || !Number.isSafeInteger(payload.insert_index) || payload.insert_index < 0)) {
+    if (pathname === "/api/tab/transfer" && (typeof payload.workspace_id !== "string" || payload.workspace_id.length === 0)) return badRequest("missing_workspace_id", "workspace_id is required");
+    if ((pathname === "/api/tab/move" || pathname === "/api/tab/transfer") && (typeof payload.insert_index !== "number" || !Number.isSafeInteger(payload.insert_index) || payload.insert_index < 0)) {
       return badRequest("invalid_index", "insert_index must be a non-negative safe integer");
     }
     try {
+      if (pathname === "/api/tab/transfer") {
+        const moved = await tabTransfer(payload.tab_id, payload.workspace_id as string, payload.insert_index as number);
+        broadcastAll({ type: "session-changed" });
+        return jsonResponse(moved satisfies TabTransferred);
+      }
       if (pathname === "/api/tab/move") {
         const moved = await tabMove(payload.tab_id, payload.insert_index as number);
         broadcastAll({ type: "session-changed" });

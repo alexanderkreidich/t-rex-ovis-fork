@@ -165,7 +165,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
   const tabsUnder = settings.focusMode && wide;
   const machineId = useMachineId();
   const activity = useSidebarActivity();
-  const { closeWorkspace, listWorktrees, moveTab, moveWorkspace, removeWorktree, renameWorkspace } = useMachineApi();
+  const { closeWorkspace, listWorktrees, moveTab, moveWorkspace, removeWorktree, renameWorkspace, transferTab } = useMachineApi();
   // the roster's wait is a live region in the list from its first render, clipped while empty (never
   // display: none); its words land a frame after it (lib/useAnnouncedText.ts)
   const loadingWords = useAnnouncedText(snapshot ? null : t("Loading workspaces…"));
@@ -300,13 +300,26 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
 
   const noteError = (message: string, workspaceId?: string, detail: string | null = null): void => setInlineError({ message, workspaceId, detail });
 
-  // focus mode's tab rows move by drag, by Alt+↑/↓ and from their menu (lib/useTabRowDrag.ts)
+  // focus mode's tab rows move by drag, by Alt+↑/↓ and from their menu, and by drag into another
+  // workspace (lib/useTabRowDrag.ts)
   const tabOrders = useMemo(() => {
     const orders = new Map<string, string[]>();
     for (const tab of snapshot?.tabs ?? []) orders.set(tab.workspace_id, [...(orders.get(tab.workspace_id) ?? []), tab.tab_id]);
     return orders;
   }, [snapshot?.tabs]);
+  // the pane open when a tab went to another workspace stays open there, under the id herdr gave it
+  const openPane = useRef(selectedPaneId);
+  openPane.current = selectedPaneId;
+  const openAtTransfer = useRef<string | null>(null);
   const tabRows = useTabRowDrag({ owner: machineId, root: workspaceRoot, tabs: tabOrders, moveTab,
+    transferTab: (tabId, workspaceId, boundary) => {
+      openAtTransfer.current = openPane.current;
+      return transferTab(tabId, workspaceId, boundary);
+    },
+    transferred: (result) => {
+      const next = openAtTransfer.current === null ? undefined : result.pane_ids[openAtTransfer.current];
+      if (next) actions.selectPane(next);
+    },
     failed: (reason, workspaceId) => {
       const failure = userErrorMessage(reason);
       noteError(t("Move failed: {reason}", { reason: failure.message }), workspaceId, failure.detail);

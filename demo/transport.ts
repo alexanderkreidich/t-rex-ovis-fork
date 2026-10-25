@@ -11,7 +11,7 @@
  * fictional retained history for scrolling and search; agent panes show one notice instead of a TUI.
  * What does not: images, push and remote PCs, which need a real machine.
  */
-import type { AgentIntegration, AgentStatus, IntegrationsResponse, Machine, MachineEvent, PaneDirection, PaneFindMatch, PaneFindRequest, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PluginActionResult, PluginActions, PluginActionsResponse, ServerMessage, SessionSnapshot, TabMoved, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../shared/protocol.ts";
+import type { AgentIntegration, AgentStatus, IntegrationsResponse, Machine, MachineEvent, PaneDirection, PaneFindMatch, PaneFindRequest, PaneResized, PaneSplit, PaneSwapped, PaneZoomed, PluginActionResult, PluginActions, PluginActionsResponse, ServerMessage, SessionSnapshot, TabMoved, TabTransferred, WorkspaceCreated, WorkspaceInfo, WorktreeEntry, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../shared/protocol.ts";
 import { isAgentName } from "../shared/agent-name.ts";
 import { neighborPane } from "../src/lib/layoutMap.ts";
 import { closeLayoutPane, resizeLayout, setLayoutSplitRatio, splitLayout, swapLayoutPanes } from "../src/lib/layoutTree.ts";
@@ -712,6 +712,49 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     relabelAutoTabs(tab.workspace_id);
     structureChanged();
     return json({ ok: true, tabs } satisfies TabMoved);
+  }
+  if (path === "/api/tab/transfer") {
+    // into another workspace; the demo keeps the panes' ids (herdr gives them new ones, and says which)
+    const body = await bodyOf(init, input);
+    if (typeof body["tab_id"] !== "string" || !body["tab_id"]) return error("missing_tab_id", "tab_id is required", 400);
+    if (typeof body["workspace_id"] !== "string" || !body["workspace_id"]) return error("missing_workspace_id", "workspace_id is required", 400);
+    const insertIndex = body["insert_index"];
+    if (typeof insertIndex !== "number" || !Number.isSafeInteger(insertIndex) || insertIndex < 0) return error("invalid_index", "insert_index must be a non-negative safe integer", 400);
+    const snap = snapshot();
+    const tab = snap.tabs.find((entry) => entry.tab_id === body["tab_id"]);
+    if (!tab) return error("tab_not_found", "no such tab", 404);
+    const target = snap.workspaces.find((workspace) => workspace.workspace_id === body["workspace_id"]);
+    if (!target) return error("workspace_not_found", "no such workspace", 404);
+    // the client moves a tab within its own workspace with tab/move
+    if (tab.workspace_id === target.workspace_id) return error("tab_move_failed", "the tab is in that workspace already", 400);
+    const into = snap.tabs.filter((entry) => entry.workspace_id === target.workspace_id);
+    if (insertIndex > into.length) return error("tab_move_failed", "insert_index exceeds the tab count", 404);
+    const from = snap.workspaces.find((workspace) => workspace.workspace_id === tab.workspace_id)!;
+    const number = Math.max(0, ...into.map((entry) => entry.number)) + 1;
+    const tabId = `${target.workspace_id}:t${number}`;
+    const panes = snap.panes.filter((pane) => pane.tab_id === tab.tab_id);
+    for (const pane of panes) Object.assign(pane, { tab_id: tabId, workspace_id: target.workspace_id });
+    for (const layout of snap.layouts) if (layout.tab_id === tab.tab_id) Object.assign(layout, { tab_id: tabId, workspace_id: target.workspace_id });
+    if (snap.focused_tab_id === tab.tab_id) Object.assign(snap, { focused_tab_id: tabId, focused_workspace_id: target.workspace_id });
+    if (autoTabs.delete(tab.tab_id)) autoTabs.add(tabId);
+    snap.tabs.splice(snap.tabs.indexOf(tab), 1);
+    const before = into[insertIndex];
+    const last = into[into.length - 1];
+    snap.tabs.splice(before ? snap.tabs.indexOf(before) : last ? snap.tabs.indexOf(last) + 1 : snap.tabs.length, 0, { ...tab, tab_id: tabId, workspace_id: target.workspace_id, number });
+    for (const workspace of [from, target]) {
+      const own = snap.panes.filter((pane) => pane.workspace_id === workspace.workspace_id);
+      const ownTabs = snap.tabs.filter((entry) => entry.workspace_id === workspace.workspace_id);
+      Object.assign(workspace, { tab_count: ownTabs.length, pane_count: own.length, agent_status: rollupStatus(own.map((pane) => pane.agent_status)) });
+      if (ownTabs[0] && !ownTabs.some((entry) => entry.tab_id === workspace.active_tab_id)) workspace.active_tab_id = ownTabs[0].tab_id;
+    }
+    // a workspace left with no tab closes, as herdr closes it
+    if (from.tab_count === 0) snap.workspaces = snap.workspaces.filter((workspace) => workspace !== from);
+    snap.workspaces.forEach((workspace, index) => { workspace.number = index + 1; });
+    relabelAutoTabs(from.workspace_id);
+    relabelAutoTabs(target.workspace_id);
+    structureChanged();
+    const tabs = snap.tabs.filter((entry) => entry.workspace_id === target.workspace_id);
+    return json({ ok: true, tab_id: tabId, tabs, pane_ids: Object.fromEntries(panes.map((pane) => [pane.pane_id, pane.pane_id])) } satisfies TabTransferred);
   }
   if (path === "/api/tab/close") {
     const body = await bodyOf(init, input);

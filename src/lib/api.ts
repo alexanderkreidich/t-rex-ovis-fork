@@ -14,6 +14,8 @@ import type {
   LanExposure,
   MoveTabRequest,
   TabMoved,
+  TransferTabRequest,
+  TabTransferred,
   OpenWorktreeRequest,
   PairedDevice,
   PairingCode,
@@ -445,6 +447,13 @@ export async function moveTab(tabId: string, insertIndex: number, machineId = "l
   const request: MoveTabRequest = { tab_id: tabId, insert_index: insertIndex };
   const response = await sendJson(machinePath(machineId, "tab/move"), "POST", request);
   return (await response.json()) as TabMoved;
+}
+
+/** Into another workspace of the PC, at a boundary of its tabs; the panes go with their shells and get new ids. */
+export async function transferTab(tabId: string, workspaceId: string, insertIndex: number, machineId = "local"): Promise<TabTransferred> {
+  const request: TransferTabRequest = { tab_id: tabId, workspace_id: workspaceId, insert_index: insertIndex };
+  const response = await sendJson(machinePath(machineId, "tab/transfer"), "POST", request);
+  return (await response.json()) as TabTransferred;
 }
 
 /** POST /api/tab/close: the tab and every pane in it; a workspace's last tab takes the workspace with it. */
