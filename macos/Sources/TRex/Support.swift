@@ -31,6 +31,15 @@ nonisolated enum UnixSocket {
 }
 
 nonisolated enum Paths {
+  /**
+   * HOME as the environment says, as the bridge and herdr read it (Bun's and Rust's home lookups
+   * both start there); NSHomeDirectory() ignores it and asks the system for the account's.
+   */
+  static var home: String {
+    let env = ProcessInfo.processInfo.environment["HOME"] ?? ""
+    return env.isEmpty ? NSHomeDirectory() : env
+  }
+
   /** realpath(3), as Node's realpathSync: Foundation's symlink resolution drops /private, which the bridge keeps. */
   static func real(_ path: String) -> String {
     guard let resolved = realpath(path, nil) else { return path }

@@ -44,8 +44,8 @@ nonisolated enum Bridge {
     }
   }
 
-  static let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "T-Rex")
-  static let logs = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appending(path: "Logs/T-Rex")
+  static let support = URL(fileURLWithPath: Paths.home).appending(path: "Library/Application Support/T-Rex")
+  static let logs = URL(fileURLWithPath: Paths.home).appending(path: "Library/Logs/T-Rex")
 
   static func connect() async throws -> Found {
     if let override = ProcessInfo.processInfo.environment["T_REX_URL"], let url = URL(string: override) {
@@ -70,14 +70,16 @@ nonisolated enum Bridge {
   /** Where herdr listens: HERDR_SOCKET, else under XDG_CONFIG_HOME or ~/.config (server/herdr/client.ts). */
   static func herdrSocket(_ env: [String: String]) -> String {
     if let socket = env["HERDR_SOCKET"], !socket.isEmpty { return socket }
-    let config = env["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? (NSHomeDirectory() + "/.config")
+    let home = env["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? Paths.home
+    let config = env["XDG_CONFIG_HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? (home + "/.config")
     return config + "/herdr/herdr.sock"
   }
 
   /** The port of the live bridge server/bridge.ts registered for this socket. */
   static func registeredPort(socket: String) -> Int? {
     let name = Paths.sha256(Paths.real(socket)) + ".json"
-    let file = URL(fileURLWithPath: NSHomeDirectory()).appending(path: ".config/t-rex/bridges/\(name)")
+    // server/bridge.ts: homedir(), which is HOME
+    let file = URL(fileURLWithPath: Paths.home).appending(path: ".config/t-rex/bridges/\(name)")
     guard let data = try? Data(contentsOf: file),
           let descriptor = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
           let port = descriptor["port"] as? Int, let pid = descriptor["pid"] as? Int32,
@@ -121,7 +123,7 @@ nonisolated enum Bridge {
     // nohup and a shell of its own: herdr's server must not be this app's child when the app quits
     process.arguments = ["-c", "exec nohup \"$0\" server >>\"$1\" 2>&1 </dev/null &", herdr, log.path]
     process.environment = env
-    process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
+    process.currentDirectoryURL = URL(fileURLWithPath: env["HOME"] ?? Paths.home)
     try process.run()
     process.waitUntilExit()
     let deadline = Date().addingTimeInterval(30)

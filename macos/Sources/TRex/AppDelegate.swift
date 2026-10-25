@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private let snapshot: URL?
   private var started: Bridge.Started?
   private var window: TRexWindowController?
+  private var termination: DispatchSourceSignal?
 
   init(snapshot: URL?) {
     self.snapshot = snapshot
@@ -18,6 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // a snapshot run draws its window off screen and never takes the keyboard (Snapshot)
     NSApp.setActivationPolicy(snapshot == nil ? .regular : .accessory)
     NSApp.mainMenu = MainMenu.build()
+    // SIGTERM (kill, a CI run) would end the app without applicationWillTerminate, leaving its
+    // bridge behind: it quits as ⌘Q does instead
+    signal(SIGTERM, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+    source.setEventHandler { MainActor.assumeIsolated { NSApp.terminate(nil) } }
+    source.resume()
+    termination = source
     let controller = TRexWindowController(snapshot: snapshot)
     window = controller
     controller.present()

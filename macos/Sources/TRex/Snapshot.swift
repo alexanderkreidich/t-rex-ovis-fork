@@ -67,10 +67,14 @@ enum Snapshot {
       NSGraphicsContext.saveGraphicsState()
       NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
       image.draw(in: NSRect(origin: .zero, size: size))
-      for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
-        guard let button = window.standardWindowButton(type), let drawn = button.bitmapImageRepForCachingDisplay(in: button.bounds) else { continue }
-        button.cacheDisplay(in: button.bounds, to: drawn)
-        drawn.draw(in: button.convert(button.bounds, to: nil))
+      // the window's buttons cannot draw themselves into a bitmap off the keyboard (they come out
+      // blank): their colours, where AppKit placed them
+      let colors = [NSColor.systemRed, .systemYellow, .systemGreen]
+      for (type, color) in zip([NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton], colors) {
+        guard let button = window.standardWindowButton(type) else { continue }
+        let frame = button.convert(button.bounds, to: nil)
+        color.setFill()
+        NSBezierPath(ovalIn: NSRect(x: frame.midX - 6, y: frame.midY - 6, width: 12, height: 12)).fill()
       }
       NSGraphicsContext.restoreGraphicsState()
       do {

@@ -27,6 +27,7 @@
     "demo/transport.ts",
     "scripts/build-remote-bundle.ts",
     "scripts/build-mac-app.ts",
+    "scripts/mac-app-smoke.ts",
     "scripts/ssh-integration.ts",
     "scripts/lan-exposure-notice-regression.ts",
     "scripts/application-paging-regression.ts",

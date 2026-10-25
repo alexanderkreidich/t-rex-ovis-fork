@@ -32,6 +32,8 @@ bun install
 bun run start       # builds, then serves on http://127.0.0.1:7317
 ```
 
+A native Mac app is in trial: [docs/macos.md](docs/macos.md) says how to download and open it.
+
 ## Develop
 
 ```bash

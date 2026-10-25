@@ -117,6 +117,9 @@ final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNaviga
       webView.underPageBackgroundColor = color
       window?.appearance = NSAppearance(named: (body["dark"] as? Bool ?? true) ? .darkAqua : .aqua)
     case "ready":
+      // what scripts/mac-app-smoke.ts waits for: the window shows T-Rex from this bridge
+      print("T-Rex: the window shows \(webView.url?.absoluteString ?? "")")
+      fflush(stdout)
       if snapshot != nil { Snapshot.pageReady() }
     default:
       break

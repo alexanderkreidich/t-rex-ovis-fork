@@ -2,7 +2,26 @@
 
 T-Rex for the Mac (`macos/`): a native window, Swift and AppKit with the system's WebKit, on the
 same bridge and client the browser uses. It looks as the installed app does in Chrome: no title
-bar, the window's buttons on T-Rex's top bar. A trial build: built from a checkout, not released.
+bar, the window's buttons on T-Rex's top bar. A trial build: CI builds it, it is not released.
+
+## Try it
+
+Needs a Mac with Apple silicon, macOS 15 or later, and [herdr](https://herdr.dev) installed.
+
+1. Open the latest green [Mac app run](https://github.com/alexanderkreidich/t-rex/actions/workflows/mac-app.yml)
+   (signed in to GitHub) and download **T-Rex-mac-arm64** under Artifacts. It holds
+   `T-Rex-arm64.zip`; open it, and move `T-Rex.app` to Applications.
+2. The app is not signed with an Apple Developer ID yet, so macOS refuses to open a downloaded copy
+   until its download mark is cleared once:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/T-Rex.app
+   ```
+
+3. Open T-Rex. With the herdr plugin running, the window joins its bridge; otherwise the app starts
+   herdr (when it is not running) and its own bridge.
+
+Or build it from a checkout ([below](#build-it)).
 
 ## What it does when it opens
 
@@ -59,6 +78,12 @@ alone checks the Swift side. The runtimes are fetched once per machine into
 `T_REX_URL=http://127.0.0.1:7417 macos/build/T-Rex.app/Contents/MacOS/T-Rex` opens a window on the
 sandbox's bridge (`bun run sandbox`).
 
+`bun scripts/mac-app-smoke.ts macos/build/T-Rex.app` opens the app as a user would: herdr and the
+app's bridge answer and can attach terminals, the window shows T-Rex from that bridge, and quitting
+stops the bridge but not herdr. `.github/workflows/mac-app.yml` runs it on a macOS runner for every
+change to the app, then keeps the zip above. It is written for that disposable Mac: on yours its
+window takes the keyboard, and it needs no bridge registered for your herdr.
+
 `macos/build/T-Rex.app/Contents/MacOS/T-Rex --snapshot out.png [--size 1280x820]` draws the window
 off the keyboard and nearly transparent, writes the page with the window's buttons once T-Rex
 shows, and quits: the check of the window's look. With `T_REX_URL` set it touches neither herdr
@@ -66,8 +91,8 @@ nor a bridge of yours.
 
 ## Not yet
 
-- Apple silicon builds only, from a checkout: no release, no Intel build, no Developer ID
-  signature or notarization.
+- Apple silicon only, as a CI artifact: no release, no Intel build, no Developer ID signature or
+  notarization.
 - The app does not update itself; Settings → Updates says to use the plugin or `bun run start`.
 - Push alerts need a service worker, which WebKit gives an app's page only with a few entitlements
   this build does not have; the bell's in-page alerts work.

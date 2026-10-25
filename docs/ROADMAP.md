@@ -192,4 +192,4 @@ harness pass, and the old flow-control path is gone.
       a Mac app, if one comes, is native.
 - [ ] **Native Mac app** (`macos/`, [macos.md](macos.md)): Swift and AppKit with the system's
       WebKit, the window drawn as the installed app is in Chrome, the bridge inside. A trial build
-      from a checkout so far: no release, no Intel build, no Developer ID.
+      CI keeps as a download (`mac-app.yml`): no release, no Intel build, no Developer ID.

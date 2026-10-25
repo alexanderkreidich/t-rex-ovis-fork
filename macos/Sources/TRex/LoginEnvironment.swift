@@ -20,7 +20,7 @@ nonisolated enum LoginEnvironment {
     process.executableURL = URL(fileURLWithPath: shell)
     process.arguments = ["-ilc", "printf '\(mark)'; command env -0"]
     process.environment = base
-    process.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory())
+    process.currentDirectoryURL = URL(fileURLWithPath: Paths.home)
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = FileHandle.nullDevice
@@ -56,7 +56,7 @@ nonisolated enum LoginEnvironment {
   }
 
   static func fallback(_ base: [String: String]) -> [String: String] {
-    let home = base["HOME"] ?? NSHomeDirectory()
+    let home = base["HOME"] ?? Paths.home
     var env = base
     env["PATH"] = [base["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin", "/opt/homebrew/bin", "/usr/local/bin", "\(home)/.local/bin", "\(home)/.cargo/bin"].joined(separator: ":")
     return env
