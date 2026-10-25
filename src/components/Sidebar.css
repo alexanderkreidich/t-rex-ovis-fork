@@ -741,6 +741,28 @@
   mask-image: linear-gradient(to right, currentColor calc(100% - var(--space-5)), transparent);
 }
 
+/* a row being dragged (lib/useTabRowDrag.ts): as on the strip, only the insertion line moves until
+   herdr has the new order */
+.workspace-tab.is-dragging > .workspace-tab-select {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.workspace-tab[data-drop]::after {
+  position: absolute;
+  right: 0;
+  left: calc(var(--side-box) - var(--space-2));
+  z-index: 1;
+  height: 2px;
+  content: "";
+  background: var(--accent);
+  border-radius: var(--radius-pill);
+  pointer-events: none;
+}
+
+.workspace-tab[data-drop="before"]::after { top: -1px; }
+.workspace-tab[data-drop="after"]::after { bottom: -1px; }
+
 .workspace-tab-rename {
   width: calc(100% - var(--side-box) + var(--space-2));
   height: calc(var(--side-row) - var(--space-2));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { adjacentTabBoundary, movedTabOrder, tabDropBoundary } from "./tabOrder.ts";
+import { adjacentTabBoundary, movedTabOrder, rowDropBoundary, tabDropBoundary } from "./tabOrder.ts";
 
 describe("native tab insertion boundaries", () => {
   const ids = ["a", "b", "c", "d"];
@@ -28,5 +28,14 @@ describe("native tab insertion boundaries", () => {
     expect(tabDropBoundary(rects, 0)).toBe(1);
     expect(tabDropBoundary(rects, 85)).toBe(2);
     expect(tabDropBoundary(rects, 208)).toBe(3);
+  });
+  it("points a column of rows at the boundary above the first row whose middle is below", () => {
+    const rows = [{ index: 0, top: 0, bottom: 28 }, { index: 1, top: 28, bottom: 56 }, { index: 3, top: 56, bottom: 84 }];
+    expect(rowDropBoundary(rows, -10)).toBe(0);
+    expect(rowDropBoundary(rows, 20)).toBe(1);
+    // a tab with no row of its own (index 2) keeps its place in herdr's order
+    expect(rowDropBoundary(rows, 50)).toBe(3);
+    expect(rowDropBoundary(rows, 80)).toBe(4);
+    expect(rowDropBoundary([], 10)).toBeNull();
   });
 });
