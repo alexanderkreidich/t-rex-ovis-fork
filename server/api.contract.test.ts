@@ -3,11 +3,12 @@ import { chmodSync, mkdtempSync, existsSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { createServer } from "./index.ts";
-import type { AgentKind, AgentStatus, ApiError, HealthAuth, IntegrationsResponse, LanExposure, PushKey, RemoteAccess, SessionSnapshot, TabMoved, PaneFindResponse, PaneReadResult, WorkspaceCreated, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../shared/protocol.ts";
+import type { AgentKind, AgentStatus, ApiError, HealthAuth, IntegrationsResponse, LanExposure, PushKey, RemoteAccess, SessionSnapshot, TabMoved, TabTransferred, PaneFindResponse, PaneReadResult, WorkspaceCreated, WorktreeListing, WorktreeOpened, WorktreeRemoved } from "../shared/protocol.ts";
 import { HerdrUpdater } from "./herdr-update.ts";
 import { noInstalledNotes, unmanagedUpdateStatus, type HerdrUpdateStatus, type InstalledNotes, type UpdateNotes } from "../shared/update.ts";
 import { HerdrSocket } from "../src/lib/ws.ts";
-import { herdrRpc, paneRead, ping, sessionSnapshot, tabCreate, workspaceCreate, workspaceClose } from "./herdr/client.ts";
+import { herdrRpc, layoutSetSplitRatio, paneRead, paneSplit, paneZoom, ping, sessionSnapshot, tabCreate, workspaceCreate, workspaceClose } from "./herdr/client.ts";
+import { paneTree, type PaneTree } from "./tab-transfer.ts";
 import { startFakePushService, type FakePushService } from "./push.fake.ts";
 import { descriptorPath, type BridgeDescriptor } from "./bridge.ts";
 import { handleMachineRequest } from "./machine-api.ts";
@@ -208,7 +209,7 @@ describe("phone access", () => {
 describe("mutation body validation", () => {
   it("rejects non-object JSON without touching herdr or losing the error envelope", async () => {
     for (const path of [
-      "/api/workspace/create", "/api/tab/create", "/api/tab/rename", "/api/tab/close", "/api/tab/move", "/api/workspace/rename", "/api/workspace/move", "/api/workspace/close",
+      "/api/workspace/create", "/api/tab/create", "/api/tab/rename", "/api/tab/close", "/api/tab/move", "/api/tab/transfer", "/api/workspace/rename", "/api/workspace/move", "/api/workspace/close",
       "/api/pane/rename", "/api/pane/input", "/api/pane/keys", "/api/pane/close", "/api/pane/image",
       "/api/pane/scroll", "/api/agent/rename",
     ]) {
@@ -350,6 +351,80 @@ describe("tab reorder", () => {
       expect((await post({ tab_id: firstId, insert_index: 1 })).status).toBe(200);
       expect(await nativeIds()).toEqual([firstId, second.tab.tab_id, third.tab.tab_id]);
     } finally { await workspaceClose(id); }
+  });
+});
+
+describe("tab transfer", () => {
+  const post = (body: unknown, path = "/api/tab/transfer") => fetch(`${base()}${path}`, {
+    method: "POST", headers: { "content-type": "application/json", "x-herdr-machine": "1" }, body: JSON.stringify(body),
+  });
+  /** the tree with each pane named by its terminal: the same shells, wherever their pane ids went */
+  const terminals = (tree: PaneTree | null, snapshot: SessionSnapshot): unknown => !tree ? null : "pane" in tree
+    ? (snapshot.panes.find((pane) => pane.pane_id === tree.pane) as { terminal_id?: string } | undefined)?.terminal_id ?? tree.pane
+    : { ...tree, ratio: Math.round(tree.ratio * 100), first: terminals(tree.first, snapshot), second: terminals(tree.second, snapshot) };
+  const layoutOf = (snapshot: SessionSnapshot, tabId: string) => snapshot.layouts.find((layout) => layout.tab_id === tabId)!;
+
+  it("requires a tab, a workspace and a non-negative safe insertion boundary", async () => {
+    expect((await fetch(`${base()}/api/tab/transfer`)).status).toBe(400);
+    for (const tab_id of [undefined, "", 4]) expect(((await (await post({ tab_id, workspace_id: "w", insert_index: 0 })).json()) as ApiError).error.code).toBe("missing_tab_id");
+    for (const workspace_id of [undefined, "", 4]) expect(((await (await post({ tab_id: "unknown:t9", workspace_id, insert_index: 0 })).json()) as ApiError).error.code).toBe("missing_workspace_id");
+    for (const insert_index of [undefined, -1, 0.5, "1"]) expect(((await (await post({ tab_id: "unknown:t9", workspace_id: "w", insert_index })).json()) as ApiError).error.code).toBe("invalid_index");
+    const missing = await post({ tab_id: "unknown:t9", workspace_id: "w", insert_index: 0 });
+    expect(missing.status).toBe(404);
+    expect(((await missing.json()) as ApiError).error.code).toBe("tab_not_found");
+  });
+
+  it("carries a split tab's shells and layout into another workspace at the boundary, herdr's focus unmoved", async () => {
+    const from = await workspaceCreate({ cwd: tmpdir(), label: "t-rex-test-transfer-from" });
+    const to = await workspaceCreate({ cwd: tmpdir(), label: "t-rex-test-transfer-to" });
+    try {
+      // agents: a | (b over c), its root split at 30%
+      const tab = await tabCreate({ workspaceId: from.workspace.workspace_id, label: "agents" });
+      const b = await paneSplit(tab.root_pane.pane_id, "right", false);
+      await paneSplit(b.pane_id, "down", false);
+      await layoutSetSplitRatio(tab.tab.tab_id, [], 0.3);
+      const before = await sessionSnapshot();
+      const shape = terminals(paneTree(layoutOf(before, tab.tab.tab_id)), before);
+      expect(shape).toMatchObject({ direction: "right", ratio: 30, second: { direction: "down" } });
+
+      const response = await post({ tab_id: tab.tab.tab_id, workspace_id: to.workspace.workspace_id, insert_index: 0 }, "/api/machines/local/tab/transfer");
+      expect(response.status).toBe(200);
+      const moved = await response.json() as TabTransferred;
+      expect(moved.tabs.map((entry) => entry.tab_id)).toEqual([moved.tab_id, to.tab.tab_id]);
+      expect(moved.tabs[0]!.label).toBe("agents");
+      const after = await sessionSnapshot();
+      expect(after.tabs.some((entry) => entry.tab_id === tab.tab.tab_id)).toBe(false);
+      expect(after.tabs.filter((entry) => entry.workspace_id === from.workspace.workspace_id).map((entry) => entry.tab_id)).toEqual([from.tab.tab_id]);
+      expect(terminals(paneTree(layoutOf(after, moved.tab_id)), after)).toEqual(shape);
+      expect(Object.keys(moved.pane_ids).sort()).toEqual(before.panes.filter((pane) => pane.tab_id === tab.tab.tab_id).map((pane) => pane.pane_id).sort());
+      for (const id of Object.values(moved.pane_ids)) expect(after.panes.find((pane) => pane.pane_id === id)?.tab_id).toBe(moved.tab_id);
+      expect(after.focused_pane_id).toBe(before.focused_pane_id);
+    } finally {
+      await workspaceClose(from.workspace.workspace_id).catch(() => {});
+      await workspaceClose(to.workspace.workspace_id);
+    }
+  });
+
+  it("puts a zoom back on its pane, and a workspace's last tab takes the workspace with it", async () => {
+    const from = await workspaceCreate({ cwd: tmpdir(), label: "t-rex-test-transfer-zoomed" });
+    const to = await workspaceCreate({ cwd: tmpdir(), label: "t-rex-test-transfer-into" });
+    try {
+      const right = await paneSplit(from.root_pane.pane_id, "right", false);
+      await paneZoom(right.pane_id, "on");
+      expect(layoutOf(await sessionSnapshot(), from.tab.tab_id).zoomed).toBe(true);
+      const response = await post({ tab_id: from.tab.tab_id, workspace_id: to.workspace.workspace_id, insert_index: 1 });
+      expect(response.status).toBe(200);
+      const moved = await response.json() as TabTransferred;
+      expect(moved.tabs.map((entry) => entry.tab_id)).toEqual([to.tab.tab_id, moved.tab_id]);
+      const after = await sessionSnapshot();
+      expect(after.workspaces.some((workspace) => workspace.workspace_id === from.workspace.workspace_id)).toBe(false);
+      const layout = layoutOf(after, moved.tab_id);
+      expect(layout.zoomed).toBe(true);
+      expect(layout.focused_pane_id).toBe(moved.pane_ids[right.pane_id]!);
+    } finally {
+      await workspaceClose(from.workspace.workspace_id).catch(() => {});
+      await workspaceClose(to.workspace.workspace_id);
+    }
   });
 });
 

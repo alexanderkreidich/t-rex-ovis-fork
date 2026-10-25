@@ -4,7 +4,8 @@
  * only, under its top row's PC switcher and +; Ctrl+F opens the palette from the terminal; no pane opens a chat, even one that asked to;
  * the pane is drawn by restty (WebGPU, or WebGL2 where the browser has no WebGPU). Focus mode
  * (Mod+Shift+.) moves the tabs under their workspace, where a row moves by drag and by Alt+↑/↓, and a
- * sidebar hidden with Mod+B hands them back to the bar.
+ * sidebar hidden with Mod+B hands them back to the bar. A row dropped on another workspace's name
+ * goes there, its shell still running; a workspace's last tab takes the workspace with it.
  * The top row's + makes a workspace at once, a shell in the PC's home, with no dialog.
  * Each pane is a rounded card whose title bar carries Split right, Split down, Zoom and Close; a
  * card dragged by its title onto another of its tab trades places with it in herdr. Mod+D from the
@@ -19,7 +20,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { createServer } from "../server/index.ts";
-import { tabCreate, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
+import { paneRead, tabCreate, workspaceClose, workspaceCreate } from "../server/herdr/client.ts";
 import { chromePath } from "./chrome-path.ts";
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), "restty-minimal-ui-")));
@@ -185,11 +186,44 @@ try {
   }, known, { timeout: 20_000 });
   madeId = await made.getAttribute("data-workspace");
   assert.equal(await page.locator("[role=dialog]").count(), 0, "no dialog opens");
-  const snapshot = await page.evaluate(async () => (await (await fetch("/api/session")).json()).snapshot) as { panes: { workspace_id: string; cwd?: string | null; agent?: string | null }[] };
+  const snapshot = await page.evaluate(async () => (await (await fetch("/api/session")).json()).snapshot) as { panes: { workspace_id: string; terminal_id?: string; cwd?: string | null; agent?: string | null }[] };
   const madePanes = snapshot.panes.filter((pane) => pane.workspace_id === madeId);
   assert.equal(madePanes.length, 1, "one pane in the new workspace");
   assert.equal(madePanes[0]!.cwd, homedir(), "its shell starts in home");
   assert.equal(madePanes[0]!.agent ?? null, null, "no agent starts in it");
+  const madeTerminal = madePanes[0]!.terminal_id;
+
+  // in focus mode, the new workspace's one tab dropped on the first workspace's name goes there,
+  // first among its tabs: the new workspace closes with its last tab, the tab stays open, and the
+  // shell in it is the same one, still taking input
+  await page.keyboard.press(`${mod}+Shift+Period`);
+  const lone = page.locator(`.workspace-group[data-workspace="${madeId}"] .workspace-tab-select`);
+  await lone.waitFor({ timeout: 5_000 });
+  const into = page.locator(`.workspace-group[data-workspace="${workspaceId}"]`);
+  const [held, name] = [await lone.boundingBox(), await into.locator(".workspace-header").boundingBox()];
+  assert.ok(held && name);
+  await page.mouse.move(held.x + held.width / 2, held.y + held.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(name.x + name.width / 2, name.y + name.height / 2, { steps: 8 });
+  await into.locator('.workspace-tab:first-child[data-drop="before"]').waitFor({ timeout: 5_000 });
+  await page.mouse.up();
+  await page.locator(`.workspace-group[data-workspace="${madeId}"]`).waitFor({ state: "detached", timeout: 10_000 });
+  const first = into.locator(".workspace-tab-select").first();
+  await page.waitForFunction((selector) => document.querySelector(selector)?.getAttribute("aria-current") === "true",
+    `.workspace-group[data-workspace="${workspaceId}"] .workspace-tab:first-child .workspace-tab-select`, { timeout: 10_000 });
+  const openTab = await first.getAttribute("data-tab-id");
+  const session = await page.evaluate(async () => (await (await fetch("/api/session")).json()).snapshot) as { panes: { pane_id: string; tab_id: string; terminal_id?: string }[] };
+  const moved = session.panes.find((pane) => pane.tab_id === openTab);
+  assert.ok(moved, "the moved tab has its pane");
+  assert.equal(moved.terminal_id, madeTerminal, "the same shell, under the pane's new id");
+  madeId = null;
+  await page.locator(".pane-frame[data-layout-pane]:not(.is-hidden) .terminal-ime").first().focus();
+  await page.keyboard.type("echo t-rex-moved-$((6*7))\n");
+  for (let deadline = Date.now() + 10_000; ; await page.waitForTimeout(200)) {
+    const text = (await paneRead({ paneId: moved.pane_id })).text;
+    if (text.includes("t-rex-moved-42")) break;
+    assert.ok(Date.now() < deadline, `the moved shell answers: ${text.slice(-200)}`);
+  }
 
   console.log("minimal-ui-regression: ok");
 } finally {

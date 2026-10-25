@@ -658,6 +658,23 @@ export async function paneSwapWith(paneId: string, targetPaneId: string, socketP
   return { ...result.swap, reason: result.swap.reason ?? null, target_pane_id: result.swap.target_pane_id ?? null };
 }
 
+/** Where herdr's pane.move takes a pane: a new tab of a workspace, or beside a pane of a tab (`ratio` is that pane's share). */
+export type PaneMoveDestination =
+  | { type: "new_tab"; workspace_id: string; label?: string }
+  | { type: "tab"; tab_id: string; target_pane_id: string; split: "right" | "down"; ratio: number };
+
+/**
+ * herdr's pane.move: the pane goes with its terminal, so what runs in it carries on. herdr's
+ * focus stays where it is (`focus: false`). In another workspace the pane gets a new id. A move
+ * herdr leaves undone (a zoomed tab, the pane's own tab) is refused as `pane_move_failed`.
+ */
+export async function paneMove(paneId: string, destination: PaneMoveDestination, socketPath?: string): Promise<{ pane: PaneInfo; created_tab?: TabInfo | null }> {
+  const result = await herdrRpc<{ move_result: { changed: boolean; reason?: string | null; pane: PaneInfo; created_tab?: TabInfo | null } }>(
+    "pane.move", { pane_id: paneId, destination, focus: false }, socketPath);
+  if (!result.move_result.changed) throw new HerdrError("pane_move_failed", `herdr left pane ${paneId} where it was (${result.move_result.reason ?? "unchanged"})`);
+  return result.move_result;
+}
+
 /** A split's absolute ratio: [] is the root, false descends first, true descends second. */
 export async function layoutSetSplitRatio(tabId: string, path: boolean[], ratio: number, socketPath?: string): Promise<void> {
   await herdrRpc("layout.set_split_ratio", { tab_id: tabId, path, ratio }, socketPath);
