@@ -31,6 +31,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      # macos/ needs Swift 6.2 (Xcode 26); the image's default Xcode is 16.4, Swift 6.1
+      - name: Select Xcode 26
+        run: |
+          xcode=$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)
+          sudo xcode-select -s "$xcode"
+          swift --version
       - uses: ./.github/actions/setup-ci
       - name: Install checksum-pinned herdr 0.9.3
         run: |
