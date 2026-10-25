@@ -443,7 +443,8 @@ your browser, OS or extensions. Installed-app mode may behave differently. While
 composing, keys stay with it. In a text field with text, a binding on an arrow, Home or End keeps
 its text-selection behavior; from an empty one, such as the chat's empty message box, they switch panes.
 List and tab controls also have focus-local keys; those do not become global terminal shortcuts.
-On a focused tab, Alt+Shift+Left/Right reorders it and Shift+F10 opens its menu. For the pane menu
+On a focused tab, Alt+Shift+Left/Right reorders it and Shift+F10 opens its menu; in focus mode a
+focused tab row moves with Alt+Up/Down, as a workspace row does. For the pane menu
 on desktop, tab to the pane header's **⋯** (it appears on keyboard focus) and press Enter.
 Shift+F10 inside the terminal stays with the terminal program.
 

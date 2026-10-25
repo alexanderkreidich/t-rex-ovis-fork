@@ -22,3 +22,12 @@ export function tabDropBoundary(rects: readonly { left: number; right: number }[
   const before = rects.findIndex((rect) => x < (rect.left + rect.right) / 2);
   return before < 0 ? rects.length : before;
 }
+
+/**
+ * The boundary a pointer at height `y` points to in a column of tab rows (the sidebar's), each
+ * row with its place in herdr's order: a row not drawn leaves its place out, not the count.
+ */
+export function rowDropBoundary(rows: readonly { index: number; top: number; bottom: number }[], y: number): number | null {
+  const before = rows.find((row) => y < (row.top + row.bottom) / 2);
+  return before ? before.index : rows.length > 0 ? rows[rows.length - 1]!.index + 1 : null;
+}

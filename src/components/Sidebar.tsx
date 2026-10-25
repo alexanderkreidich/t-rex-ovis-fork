@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type AnimationEvent, type DragEvent, type KeyboardEvent, type MouseEvent } from "react";
-import { ChevronDown, ChevronRight, Ellipsis, FolderOpen, GitBranch, Pencil, Pin, PinOff, Plus, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Ellipsis, FolderOpen, GitBranch, Pencil, Pin, PinOff, Plus, SquareTerminal, Trash2, TriangleAlert, X } from "lucide-react";
 
 import "./Sidebar.css";
 
@@ -25,6 +25,7 @@ import { useMediaQuery } from "../lib/useMediaQuery.ts";
 import { useAnnouncedText } from "../lib/useAnnouncedText.ts";
 import { useWorktreeBranches } from "../lib/useWorktreeBranches.ts";
 import { watchTouchReorder } from "../lib/touchReorder.ts";
+import { useTabRowDrag } from "../lib/useTabRowDrag.ts";
 import { placeBlock, workspaceMoves, worktreeGroups as groupWorktrees } from "../lib/workspaceOrder.ts";
 import { worktreeLabel } from "../lib/worktreeName.ts";
 import { lastViewedPane, rememberViewedPane } from "../lib/lastViewedPane.ts";
@@ -164,7 +165,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
   const tabsUnder = settings.focusMode && wide;
   const machineId = useMachineId();
   const activity = useSidebarActivity();
-  const { closeWorkspace, listWorktrees, moveWorkspace, removeWorktree, renameWorkspace } = useMachineApi();
+  const { closeWorkspace, listWorktrees, moveTab, moveWorkspace, removeWorktree, renameWorkspace } = useMachineApi();
   // the roster's wait is a live region in the list from its first render, clipped while empty (never
   // display: none); its words land a frame after it (lib/useAnnouncedText.ts)
   const loadingWords = useAnnouncedText(snapshot ? null : t("Loading workspaces…"));
@@ -298,6 +299,20 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
   }, [snapshot, selectedPaneId, branches]);
 
   const noteError = (message: string, workspaceId?: string, detail: string | null = null): void => setInlineError({ message, workspaceId, detail });
+
+  // focus mode's tab rows move by drag, by Alt+↑/↓ and from their menu (lib/useTabRowDrag.ts)
+  const tabOrders = useMemo(() => {
+    const orders = new Map<string, string[]>();
+    for (const tab of snapshot?.tabs ?? []) orders.set(tab.workspace_id, [...(orders.get(tab.workspace_id) ?? []), tab.tab_id]);
+    return orders;
+  }, [snapshot?.tabs]);
+  const tabRows = useTabRowDrag({ owner: machineId, root: workspaceRoot, tabs: tabOrders, moveTab,
+    failed: (reason, workspaceId) => {
+      const failure = userErrorMessage(reason);
+      noteError(t("Move failed: {reason}", { reason: failure.message }), workspaceId, failure.detail);
+    },
+    stale: (workspaceId) => noteError(t("Tab order did not refresh. Try again."), workspaceId),
+  });
 
   /** the pane a workspace's row shows and opens, among the panes the row stands for */
   const currentPane = (workspace: WorkspaceInfo, panes: PaneInfo[]): PaneInfo => {
@@ -697,7 +712,7 @@ export function Sidebar({ snapshot, online, selectedPaneId, actions }: SidebarPr
           })}
         ><Plus aria-hidden="true" /></button>}
       </div>
-      {tabsUnder && snapshot && <WorkspaceTabs snapshot={snapshot} workspace={workspace} panes={panes} selectedPaneId={selectedPaneId} online={online} actions={actions} noteError={noteError} />}
+      {tabsUnder && snapshot && <WorkspaceTabs snapshot={snapshot} workspace={workspace} panes={panes} selectedPaneId={selectedPaneId} online={online} actions={actions} noteError={noteError} rows={tabRows} />}
       {inlineError?.workspaceId === workspace.workspace_id && <p className="sidebar-inline-error" role="alert">{inlineError.message}{inlineError.detail !== null && <><br /><code>{inlineError.detail}</code></>}</p>}
     </li>;
   };
@@ -764,6 +779,8 @@ interface WorkspaceTabsProps {
   online: boolean;
   actions: AppActions;
   noteError: (message: string, workspaceId?: string, detail?: string | null) => void;
+  /** the list's one tab row drag, and the moves its menu and keys make */
+  rows: ReturnType<typeof useTabRowDrag>;
 }
 
 /**
@@ -771,9 +788,9 @@ interface WorkspaceTabsProps {
  * pill is (TabStrip): its pane's mark and the tab's name, and its state in the status cell every
  * sidebar row has. A tab with no agent in it is dimmer: nothing is at work there. A click opens the
  * pane the strip would; the strip's menu is a right-click, Shift+F10 or the context-menu key away,
- * F2 names a tab and Delete closes it.
+ * F2 names a tab and Delete closes it. A drag moves a row, and so do Alt+↑/↓ and the menu.
  */
-function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, actions, noteError }: WorkspaceTabsProps) {
+function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, actions, noteError, rows }: WorkspaceTabsProps) {
   const t = useT();
   const machineId = useMachineId();
   const activity = useSidebarActivity();
@@ -801,6 +818,18 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
   const focusRow = (tabId: string): void => {
     window.requestAnimationFrame(() => list.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(tabId)}"]`)?.focus());
   };
+  // a row moved by its keys keeps the focus in its new place, once herdr's order shows it there
+  const refocus = useRef<string | null>(null);
+  const order = tabs.map((tab) => tab.tab_id).join("\n");
+  useLayoutEffect(() => {
+    const tabId = refocus.current;
+    refocus.current = null;
+    const row = tabId ? list.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(tabId)}"]`) : null;
+    if (row && document.activeElement !== row) row.focus();
+  }, [order]);
+  useEffect(() => {
+    if (!rows.moving) refocus.current = null;
+  }, [rows.moving]);
 
   // the strip, which keeps the pane each tab was last seen on, is not drawn in focus mode
   const openPane = panes.find((pane) => pane.pane_id === selectedPaneId);
@@ -883,10 +912,15 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
 
   const menuItems = (tab: HerdrTab): RowMenuItem[] => [
     { id: "rename-tab", label: t("Rename tab"), icon: Pencil, run: () => beginRename(tab) },
+    ...(!rows.moving && placeOf(tab) > 1
+      ? [{ id: "move-up", label: t("Move tab up"), icon: ArrowUp, run: () => rows.moveAdjacent(tab.tab_id, workspace.workspace_id, -1) }] : []),
+    ...(!rows.moving && placeOf(tab) < tabs.length
+      ? [{ id: "move-down", label: t("Move tab down"), icon: ArrowDown, run: () => rows.moveAdjacent(tab.tab_id, workspace.workspace_id, 1) }] : []),
     { id: "close-tab", label: t("Close tab"), icon: X, danger: true, run: () => requestClose(tab) },
   ];
   const openMenu = (event: MouseEvent<HTMLButtonElement>, tab: HerdrTab): void => {
     event.preventDefault();
+    rows.cancelDrag();
     setMenu({ anchor: event.currentTarget, tab, point: event.clientX || event.clientY ? { x: event.clientX, y: event.clientY } : undefined,
       previousFocus: document.activeElement instanceof HTMLElement ? document.activeElement : null });
   };
@@ -899,6 +933,14 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
       if (!event.repeat) setMenu({ anchor: row, tab, previousFocus: row });
       return;
     }
+    // as a workspace row moves among the workspaces
+    if (event.altKey && !event.shiftKey && !event.ctrlKey && !event.metaKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+      event.preventDefault();
+      if (event.repeat) return;
+      refocus.current = tab.tab_id;
+      rows.moveAdjacent(tab.tab_id, workspace.workspace_id, event.key === "ArrowUp" ? -1 : 1);
+      return;
+    }
     if (event.key !== "F2" && event.key !== "Delete") return;
     event.preventDefault();
     // a held key is one press: the focus moves to the row beside a closed one
@@ -908,8 +950,8 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
 
   return (
     <>
-      <ul ref={list} className="workspace-tabs" aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} onKeyDown={onKeyDown}>
-        {tabs.map((tab) => {
+      <ul ref={list} className="workspace-tabs" data-workspace={workspace.workspace_id} aria-label={t("Tabs of {workspace}", { workspace: workspace.label })} aria-busy={rows.moving} onKeyDown={onKeyDown}>
+        {tabs.map((tab, index) => {
           const own = panesOf(tab);
           const pane = paneFor(tab);
           if (!pane) return null;
@@ -917,8 +959,10 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
           const open = own.some((candidate) => candidate.pane_id === selectedPaneId);
           const quiet = !own.some((candidate) => candidate.agent);
           const status = online ? rollupStatus(own.map((candidate) => activity.status(machineId, candidate))) : undefined;
+          const target = rows.drag?.target?.workspaceId === workspace.workspace_id ? rows.drag.target.boundary : null;
           return (
-            <li key={tab.tab_id} className={`workspace-tab${open ? " is-selected" : ""}${quiet ? " is-quiet" : ""}${arrived(tab.tab_id) ? " is-new" : ""}`}>
+            <li key={tab.tab_id} className={`workspace-tab${open ? " is-selected" : ""}${quiet ? " is-quiet" : ""}${arrived(tab.tab_id) ? " is-new" : ""}${rows.drag?.tabId === tab.tab_id ? " is-dragging" : ""}`}
+              data-index={index} data-drop={target === index ? "before" : target === tabs.length && index === tabs.length - 1 ? "after" : undefined}>
               {editing?.tabId === tab.tab_id ? (
                 <input
                   className="input workspace-tab-rename"
@@ -945,10 +989,16 @@ function WorkspaceTabs({ snapshot, workspace, panes, selectedPaneId, online, act
                   data-tab-id={tab.tab_id}
                   aria-current={open ? "true" : undefined}
                   aria-haspopup="menu"
-                  aria-keyshortcuts="Shift+F10 F2 Delete"
+                  aria-keyshortcuts="Shift+F10 F2 Delete Alt+ArrowUp Alt+ArrowDown"
+                  aria-description={tabs.length > 1 ? t("Drag to reorder · Alt+↑/↓") : undefined}
                   title={own.length === 1 ? displayPaneTitle(pane) : t("{n} panes", { n: own.length })}
                   onMouseDown={(event) => { if (event.button === 2 || (event.button === 0 && event.ctrlKey)) event.preventDefault(); }}
-                  onClick={(event) => { if (!event.ctrlKey) actions.selectPane(pane.pane_id); }}
+                  onPointerDown={(event) => rows.onPointerDown(event, tab.tab_id, workspace.workspace_id)}
+                  onPointerMove={rows.onPointerMove}
+                  onPointerUp={rows.onPointerUp}
+                  onPointerCancel={rows.cancelDrag}
+                  onLostPointerCapture={rows.cancelDrag}
+                  onClick={(event) => { if (!rows.consumeClick(event.detail) && !event.ctrlKey) actions.selectPane(pane.pane_id); }}
                   onDoubleClick={() => beginRename(tab)}
                   onContextMenu={(event) => openMenu(event, tab)}
                   // the middle button closes a tab, as it does a browser's

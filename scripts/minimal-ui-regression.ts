@@ -3,8 +3,8 @@
  * holds the sidebar toggle and the tabs as pills and nothing else; the sidebar lists workspaces
  * only, under its top row's PC switcher and +; Ctrl+F opens the palette from the terminal; no pane opens a chat, even one that asked to;
  * the pane is drawn by restty (WebGPU, or WebGL2 where the browser has no WebGPU). Focus mode
- * (Mod+Shift+.) moves the tabs under their workspace, and a sidebar hidden with Mod+B hands them back to
- * the bar.
+ * (Mod+Shift+.) moves the tabs under their workspace, where a row moves by drag and by Alt+↑/↓, and a
+ * sidebar hidden with Mod+B hands them back to the bar.
  * The top row's + makes a workspace at once, a shell in the PC's home, with no dialog.
  * Each pane is a rounded card whose title bar carries Split right, Split down, Zoom and Close; a
  * card dragged by its title onto another of its tab trades places with it in herdr. Mod+D from the
@@ -107,6 +107,27 @@ try {
   await rows.nth(1).click();
   await page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-tab.is-selected .workspace-tab-select`).nth(0).waitFor();
   assert.equal(await rows.nth(1).getAttribute("aria-current"), "true", "a row opens its tab's pane");
+  // a row dragged below the other takes its place in herdr, a line saying where while it is held;
+  // the drag opens nothing, and Alt+↑ moves it back with the focus kept on it
+  const order = () => rows.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("data-tab-id")));
+  const ordered = (want: (string | null)[]) => page.waitForFunction(({ selector, want }) => JSON.stringify([...document.querySelectorAll(selector)].map((button) => button.getAttribute("data-tab-id"))) === want,
+    { selector: `.workspace-group[data-workspace="${workspaceId}"] .workspace-tab-select`, want: JSON.stringify(want) }, { timeout: 5_000 });
+  const before = await order();
+  const [upper, lower] = [await rows.nth(0).boundingBox(), await rows.nth(1).boundingBox()];
+  assert.ok(upper && lower);
+  await page.mouse.move(upper.x + upper.width / 2, upper.y + upper.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(upper.x + upper.width / 2, lower.y + lower.height * 0.8, { steps: 6 });
+  await page.locator(`.workspace-group[data-workspace="${workspaceId}"] .workspace-tab:last-child[data-drop="after"]`).waitFor({ timeout: 5_000 });
+  assert.equal(await page.locator(".workspace-tab.is-dragging").count(), 1, "the held row is marked");
+  await page.mouse.up();
+  await ordered([before[1]!, before[0]!]);
+  assert.equal(await page.locator(".workspace-tab.is-dragging, .workspace-tab[data-drop]").count(), 0, "the line goes with the drop");
+  assert.equal(await page.locator(`.workspace-tab-select[aria-current="true"]`).getAttribute("data-tab-id"), before[1], "the drag opened nothing");
+  await rows.nth(1).focus();
+  await page.keyboard.press("Alt+ArrowUp");
+  await ordered(before);
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("data-tab-id")), before[0], "the moved row keeps the focus");
   // a hidden sidebar hands the tabs back to the bar, and showing it takes them again
   await page.keyboard.press(`${mod}+b`);
   await tabs.nth(1).waitFor({ timeout: 5_000 });
