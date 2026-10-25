@@ -50,7 +50,7 @@ it("the demo relabels automatic tab names by place and leaves custom numeric nam
     const invalid = await demo.fetch("/api/tab/move", { method: "POST", body: JSON.stringify({ tab_id: ordered[0].tab_id, insert_index: -1 }) });
     assert.equal(invalid.status, 400);
 
-    // into another workspace: before its first tab; a workspace's last tab takes the workspace with it
+    // into another workspace: before its first tab; a workspace's last tab leaves a new shell there
     const other = (await post("/api/workspace/create", { cwd: "/home/demo/tabs-other", label: "tabs-other" })).workspace_id as string;
     const carried = await post("/api/tab/transfer", { tab_id: ordered[2].tab_id, workspace_id: other, insert_index: 0 });
     assert.deepEqual((await labels(other)).map((entry: string) => entry.split("=")[1]), ["build", "tabs-other"]);
@@ -60,7 +60,11 @@ it("the demo relabels automatic tab names by place and leaves custom numeric nam
     const lone = await post("/api/workspace/create", { cwd: "/home/demo/tabs-lone", label: "tabs-lone" });
     await post("/api/tab/transfer", { tab_id: lone.tab_id ?? `${lone.workspace_id}:t1`, workspace_id: other, insert_index: 2 });
     const afterTransfer = (await (await demo.fetch("/api/session")).json()).snapshot;
-    assert.equal(afterTransfer.workspaces.some((entry: any) => entry.workspace_id === lone.workspace_id), false);
+    assert.equal(afterTransfer.workspaces.some((entry: any) => entry.workspace_id === lone.workspace_id), true);
+    const kept = afterTransfer.tabs.filter((tab: any) => tab.workspace_id === lone.workspace_id);
+    assert.equal(kept.length, 1);
+    assert.notEqual(kept[0].tab_id, lone.tab_id ?? `${lone.workspace_id}:t1`);
+    assert.equal(afterTransfer.panes.find((pane: any) => pane.tab_id === kept[0].tab_id)?.cwd, "/home/demo/tabs-lone");
     assert.equal(afterTransfer.tabs.filter((tab: any) => tab.workspace_id === other).length, 3);
   } finally {
     for (const [key, descriptor] of saved) {

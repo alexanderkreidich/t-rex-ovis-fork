@@ -164,8 +164,9 @@ export type { Machine, MachineEvent, PaneTarget, SetupJob, SetupRequest, SetupAc
  *  POST   /api/tab/transfer { tab_id, workspace_id, insert_index } -> TabTransferred
  *         (the tab into another workspace, at that boundary of its tabs, 0..their count: herdr's
  *         pane.move carries each pane over with its terminal and rebuilds the split layout, a zoom
- *         included; the panes get new ids. herdr closes the old tab, and a workspace left with no
- *         tab. Its own workspace is a plain tab.move. A failure halfway leaves the panes moved so far.)
+ *         included; the panes get new ids. herdr closes the old tab; a workspace's last tab leaves a
+ *         new shell tab behind, opened first, so the workspace stays. Its own workspace is a plain
+ *         tab.move. A failure halfway leaves the panes moved so far.)
  *  POST   /api/tab/close  { tab_id } -> { ok: true } (tab.close: every pane in the tab closes, and
  *         a workspace's last tab takes the workspace with it)
  *  POST   /api/workspace/rename { workspace_id, label } -> { ok: true } (trimmed; empty: 400

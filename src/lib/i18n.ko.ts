@@ -701,6 +701,8 @@ export const KO: Record<string, string> = {
   "Move tab right": "탭을 오른쪽으로 이동",
   "Move tab up": "탭을 위로 이동",
   "Move tab down": "탭을 아래로 이동",
+  "New shell": "새 셸",
+  "Moving…": "옮기는 중…",
   "Tab order did not refresh. Try again.": "탭 순서가 갱신되지 않았습니다. 다시 시도해 주세요.",
   "Jump to bottom": "맨 아래로 이동",
   "Scroll failed: {reason}": "스크롤 실패: {reason}",

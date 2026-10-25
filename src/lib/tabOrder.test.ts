@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { adjacentTabBoundary, movedTabOrder, rowDropBoundary, tabDropBoundary } from "./tabOrder.ts";
+import { adjacentTabBoundary, liftRow, liftShift, movedTabOrder, nearestSlot, tabDropBoundary, type RowSlot } from "./tabOrder.ts";
 
 describe("native tab insertion boundaries", () => {
   const ids = ["a", "b", "c", "d"];
@@ -29,13 +29,49 @@ describe("native tab insertion boundaries", () => {
     expect(tabDropBoundary(rects, 85)).toBe(2);
     expect(tabDropBoundary(rects, 208)).toBe(3);
   });
-  it("points a column of rows at the boundary above the first row whose middle is below", () => {
-    const rows = [{ index: 0, top: 0, bottom: 28 }, { index: 1, top: 28, bottom: 56 }, { index: 3, top: 56, bottom: 84 }];
-    expect(rowDropBoundary(rows, -10)).toBe(0);
-    expect(rowDropBoundary(rows, 20)).toBe(1);
-    // a tab with no row of its own (index 2) keeps its place in herdr's order
-    expect(rowDropBoundary(rows, 50)).toBe(3);
-    expect(rowDropBoundary(rows, 80)).toBe(4);
-    expect(rowDropBoundary([], 10)).toBeNull();
+});
+
+describe("a tab row lifted out of the sidebar's column", () => {
+  // api: rows from 0 (a2 has no row of its own, a3 is drawn third); web: a header further down; infra: one tab
+  const columns = [
+    { workspaceId: "api", top: 0, rows: [{ tabId: "a0", index: 0, top: 0, bottom: 30 }, { tabId: "a1", index: 1, top: 30, bottom: 60 }, { tabId: "a3", index: 3, top: 60, bottom: 90 }] },
+    { workspaceId: "web", top: 128, rows: [{ tabId: "w0", index: 0, top: 128, bottom: 158 }, { tabId: "w1", index: 1, top: 158, bottom: 188 }] },
+    { workspaceId: "infra", top: 226, rows: [{ tabId: "i0", index: 0, top: 226, bottom: 256 }] },
+  ];
+  const at = (slots: RowSlot[], workspaceId: string, boundary: number): RowSlot => slots.find((slot) => slot.workspaceId === workspaceId && slot.boundary === boundary)!;
+
+  it("closes the rows up under it, and offers every place where they would stand with it gone", () => {
+    const lift = liftRow(columns, "a0", false)!;
+    expect(lift.slots.map(({ workspaceId, boundary, final, y, home }) => [workspaceId, boundary, final, y, home])).toEqual([
+      ["api", 0, 0, 0, true], ["api", 2, 1, 30, false], ["api", 4, 3, 60, false],
+      ["web", 0, 0, 98, false], ["web", 1, 1, 128, false], ["web", 2, 2, 158, false],
+      ["infra", 0, 0, 196, false], ["infra", 1, 1, 226, false],
+    ]);
+    // its top just past a1's middle: below a1
+    expect(nearestSlot(lift.slots, 16)).toBe(at(lift.slots, "api", 2));
+    expect(nearestSlot(lift.slots, 120)).toBe(at(lift.slots, "web", 1));
+    expect(nearestSlot([], 0)).toBeNull();
+  });
+
+  it("opens the slot it is over and moves the rest back where they were", () => {
+    const lift = liftRow(columns, "a0", false)!;
+    // over its own place: nothing moves
+    for (const top of [30, 60, 94, 128, 226]) expect(liftShift(top, lift, at(lift.slots, "api", 0))).toBe(0);
+    // below a1: a1 comes up, the rest stay
+    expect(liftShift(30, lift, at(lift.slots, "api", 2))).toBe(-30);
+    expect(liftShift(60, lift, at(lift.slots, "api", 2))).toBe(0);
+    // into web, before w1: api's rows and web's name and w0 come up, w1 on stays
+    expect([60, 94, 128, 158, 226].map((top) => liftShift(top, lift, at(lift.slots, "web", 1)))).toEqual([-30, -30, -30, 0, 0]);
+    // dropped nowhere: the rows close up
+    expect(liftShift(158, lift, null)).toBe(-30);
+  });
+
+  it("keeps a workspace's last tab's place open, and pushes the rows down where it goes", () => {
+    const lift = liftRow(columns, "i0", true)!;
+    expect(lift.slots.filter((slot) => slot.home).map((slot) => [slot.workspaceId, slot.boundary])).toEqual([["infra", 0], ["infra", 1]]);
+    expect(at(lift.slots, "web", 0).y).toBe(128);
+    expect(liftShift(256, lift, at(lift.slots, "infra", 1))).toBe(0);
+    expect([0, 30, 60, 128].map((top) => liftShift(top, lift, at(lift.slots, "api", 1)))).toEqual([0, 30, 30, 30]);
+    expect(liftRow(columns, "gone", false)).toBeNull();
   });
 });

@@ -623,6 +623,7 @@
    repository: a line down the rows and a rounded elbow into the last, then the tab's mark; its
    state sits in the status column every row shares. */
 .workspace-tabs {
+  position: relative;
   margin: 0 0 var(--space-1);
   padding: 0;
   list-style: none;
@@ -696,6 +697,9 @@
   line-height: var(--lh-tight);
   text-align: left;
   cursor: pointer;
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
 }
 
 /* the fill moves with the open tab at once: a tab is picked by key as often as by pointer */
@@ -741,27 +745,69 @@
   mask-image: linear-gradient(to right, currentColor calc(100% - var(--space-5)), transparent);
 }
 
-/* a row being dragged (lib/useTabRowDrag.ts): as on the strip, only the insertion line moves until
-   herdr has the new order */
-.workspace-tab.is-dragging > .workspace-tab-select {
-  opacity: 0.55;
-  cursor: grabbing;
+/* A row dragged by the mouse (lib/useTabRowDrag.ts) rises over the list and follows the pointer, as
+   a finger's workspace row does; the rows it passes step aside to open its slot, each on its own
+   transform transition (the tab rows' is above), and come back when it moves on. */
+.machine-workspaces.is-tab-dragging .workspace-header,
+.machine-workspaces.is-tab-dragging .sidebar-inline-error,
+.machine-workspaces.is-tab-dragging .sidebar-pinned-label {
+  transition:
+    background-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-base) var(--ease-out);
 }
 
-.workspace-tab[data-drop]::after {
+.machine-workspaces.is-tab-dragging .workspace-tab-select { cursor: grabbing; }
+
+.workspace-tab.is-lifted {
+  z-index: 2;
+  transition: none;
+}
+
+.workspace-tab.is-lifted::before { display: none; }
+
+.workspace-tab.is-lifted > .workspace-tab-select {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-card);
+  color: var(--text-strong);
+  transform: scale(1.015);
+}
+
+/* a workspace's last tab carried off: its place says the shell that will keep the workspace */
+.workspace-tabs[data-vacated]::after {
   position: absolute;
+  top: var(--space-1);
   right: 0;
   left: calc(var(--side-box) - var(--space-2));
-  z-index: 1;
-  height: 2px;
-  content: "";
-  background: var(--accent);
-  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  height: calc(var(--side-row) - 3 * var(--space-1));
+  padding: 0 var(--space-2);
+  content: attr(data-vacated);
+  border: var(--hairline) dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
   pointer-events: none;
+  transform: translateY(var(--vacated-shift, 0px));
+  transition: transform var(--dur-base) var(--ease-out);
 }
 
-.workspace-tab[data-drop="before"]::after { top: -1px; }
-.workspace-tab[data-drop="after"]::after { bottom: -1px; }
+.worktree-children .workspace-tabs[data-vacated]::after { left: calc(2 * var(--side-box) - var(--space-2)); }
+
+/* a moved row waits for herdr to make the move, and so does the shell keeping its old workspace */
+.workspace-tab.is-carried .workspace-tab-name,
+.workspace-tab.is-placeholder .workspace-tab-name { opacity: 0.6; }
+
+.workspace-tab.is-placeholder > .workspace-tab-select { pointer-events: none; }
+
+.sidebar-status-moving { color: var(--text-dim); }
+
+/* drawn in steps, as the palette's running action is: the browser draws those frames and no more */
+.sidebar-status-moving svg { animation: sidebar-moving-spin var(--dur-spin) steps(8) infinite; }
+
+@keyframes sidebar-moving-spin {
+  to { transform: rotate(360deg); }
+}
 
 .workspace-tab-rename {
   width: calc(100% - var(--side-box) + var(--space-2));
@@ -820,6 +866,17 @@
   }
 
   .workspace-new-tab:active:not(:disabled) { transform: none; }
+
+  /* the rows still make room for a held one, without travelling there */
+  .machine-workspaces.is-tab-dragging .workspace-tab,
+  .machine-workspaces.is-tab-dragging .workspace-header,
+  .machine-workspaces.is-tab-dragging .sidebar-inline-error,
+  .machine-workspaces.is-tab-dragging .sidebar-pinned-label,
+  .workspace-tabs[data-vacated]::after { transition: none; }
+
+  .workspace-tab.is-lifted > .workspace-tab-select { transform: none; }
+
+  .sidebar-status-moving svg { animation: none; }
 }
 
 /* From 769px the sidebar stands on the window's recessed surface (styles.css), beside the pane

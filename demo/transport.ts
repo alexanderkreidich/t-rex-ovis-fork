@@ -344,6 +344,33 @@ const PLUGINS: PluginActions[] = [
   ] },
 ];
 
+/** A tab with one new pane at the end of a workspace, as herdr's tab.create makes it: a shell, or an agent's. */
+function addDemoTab(snap: SessionSnapshot, workspace: WorkspaceInfo, options: { cwd?: string | null; label: string; agent: string | null }): Pane {
+  const { label, agent } = options;
+  const id = workspace.workspace_id;
+  const siblings = snap.panes.filter((p) => p.workspace_id === id);
+  const cwd = String(options.cwd ?? siblings[0]?.cwd ?? "/home/demo");
+  const tabs = snap.tabs.filter((tab) => tab.workspace_id === id);
+  const number = Math.max(0, ...tabs.map((tab) => tab.number)) + 1;
+  const tabId = `${id}:t${number}`;
+  const template = snap.panes[0]!;
+  const pane: Pane = { ...structuredClone(template), pane_id: `${id}:p${(nextWorkspace++).toString(36)}`, tab_id: tabId, terminal_id: `${id}:term${number}`, workspace_id: id, label: null, title: null, agent, agent_session: null, agent_status: agent ? "working" : "unknown", cwd, foreground_cwd: cwd, focused: false, terminal_title: null, terminal_title_stripped: null, revision: 1 };
+  snap.panes.push(pane);
+  addAgent(pane);
+  snap.tabs.push({ ...structuredClone(snap.tabs[0]!), tab_id: tabId, workspace_id: id, label, number, agent_status: pane.agent_status, focused: false, pane_count: 1 });
+  addDemoLayout(id, tabId, pane.pane_id);
+  if (label === "") autoTabs.add(tabId);
+  else autoTabs.delete(tabId);
+  relabelAutoTabs(id);
+  workspace.tab_count = tabs.length + 1;
+  workspace.pane_count = siblings.length + 1;
+  if (agent) {
+    keyOfPane.set(pane.pane_id, pane.pane_id);
+    setTimeout(() => { if (!replying.has(pane.pane_id)) finishDemoTurn(pane.pane_id, "idle"); }, 1500);
+  }
+  return pane;
+}
+
 async function route(url: URL, method: string, init: RequestInit | undefined, input: RequestInfo | URL): Promise<Response> {
   const path = url.pathname;
   const query = url.searchParams;
@@ -730,9 +757,12 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     const into = snap.tabs.filter((entry) => entry.workspace_id === target.workspace_id);
     if (insertIndex > into.length) return error("tab_move_failed", "insert_index exceeds the tab count", 404);
     const from = snap.workspaces.find((workspace) => workspace.workspace_id === tab.workspace_id)!;
+    // a workspace's last tab leaves a new shell behind, opened first, and the workspace stays (server/tab-transfer.ts)
+    const leftPanes = snap.panes.filter((pane) => pane.tab_id === tab.tab_id);
+    if (snap.tabs.filter((entry) => entry.workspace_id === from.workspace_id).length === 1) addDemoTab(snap, from, { cwd: leftPanes[0]?.cwd, label: "", agent: null });
     const number = Math.max(0, ...into.map((entry) => entry.number)) + 1;
     const tabId = `${target.workspace_id}:t${number}`;
-    const panes = snap.panes.filter((pane) => pane.tab_id === tab.tab_id);
+    const panes = leftPanes;
     for (const pane of panes) Object.assign(pane, { tab_id: tabId, workspace_id: target.workspace_id });
     for (const layout of snap.layouts) if (layout.tab_id === tab.tab_id) Object.assign(layout, { tab_id: tabId, workspace_id: target.workspace_id });
     if (snap.focused_tab_id === tab.tab_id) Object.assign(snap, { focused_tab_id: tabId, focused_workspace_id: target.workspace_id });
@@ -747,9 +777,6 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
       Object.assign(workspace, { tab_count: ownTabs.length, pane_count: own.length, agent_status: rollupStatus(own.map((pane) => pane.agent_status)) });
       if (ownTabs[0] && !ownTabs.some((entry) => entry.tab_id === workspace.active_tab_id)) workspace.active_tab_id = ownTabs[0].tab_id;
     }
-    // a workspace left with no tab closes, as herdr closes it
-    if (from.tab_count === 0) snap.workspaces = snap.workspaces.filter((workspace) => workspace !== from);
-    snap.workspaces.forEach((workspace, index) => { workspace.number = index + 1; });
     relabelAutoTabs(from.workspace_id);
     relabelAutoTabs(target.workspace_id);
     structureChanged();
@@ -821,30 +848,9 @@ async function route(url: URL, method: string, init: RequestInit | undefined, in
     const workspace = snap.workspaces.find((w) => w.workspace_id === body["workspace_id"]);
     if (!workspace) return error("not_found", "no such workspace", 404);
     const agent = (body["agent"] as { kind?: string } | null | undefined)?.kind ?? null;
-    const id = workspace.workspace_id;
-    const siblings = snap.panes.filter((p) => p.workspace_id === id);
-    const cwd = String(body["cwd"] ?? siblings[0]?.cwd ?? "/home/demo");
-    const tabs = snap.tabs.filter((tab) => tab.workspace_id === id);
-    const number = Math.max(0, ...tabs.map((tab) => tab.number)) + 1;
-    const tabId = `${id}:t${number}`;
-    const template = snap.panes[0]!;
-    const pane: Pane = { ...structuredClone(template), pane_id: `${id}:p${(nextWorkspace++).toString(36)}`, tab_id: tabId, terminal_id: `${id}:term${number}`, workspace_id: id, label: null, title: null, agent, agent_session: null, agent_status: agent ? "working" : "unknown", cwd, foreground_cwd: cwd, focused: false, terminal_title: null, terminal_title_stripped: null, revision: 1 };
-    snap.panes.push(pane);
-    addAgent(pane);
-    const label = String(body["label"] ?? "");
-    snap.tabs.push({ ...structuredClone(snap.tabs[0]!), tab_id: tabId, workspace_id: id, label, number, agent_status: pane.agent_status, focused: false, pane_count: 1 });
-    addDemoLayout(id, tabId, pane.pane_id);
-    if (label === "") autoTabs.add(tabId);
-    else autoTabs.delete(tabId);
-    relabelAutoTabs(id);
-    workspace.tab_count = tabs.length + 1;
-    workspace.pane_count = siblings.length + 1;
-    if (agent) {
-      keyOfPane.set(pane.pane_id, pane.pane_id);
-      setTimeout(() => { if (!replying.has(pane.pane_id)) finishDemoTurn(pane.pane_id, "idle"); }, 1500);
-    }
+    const pane = addDemoTab(snap, workspace, { cwd: body["cwd"] as string | null | undefined, label: String(body["label"] ?? ""), agent });
     structureChanged();
-    return json({ workspace_id: id, pane_id: pane.pane_id, agent_started: agent !== null } satisfies WorkspaceCreated);
+    return json({ workspace_id: workspace.workspace_id, pane_id: pane.pane_id, agent_started: agent !== null } satisfies WorkspaceCreated);
   }
   // no key in the demo: the app falls back to the browser's own speech recognition
   return error("demo", `${method} ${path} is not part of the demo`, 404);

@@ -705,6 +705,8 @@ export const ZH: Record<string, string> = {
   "Move tab right": "向右移动标签页",
   "Move tab up": "向上移动标签页",
   "Move tab down": "向下移动标签页",
+  "New shell": "新的 Shell",
+  "Moving…": "移动中…",
   "Tab order did not refresh. Try again.": "标签页顺序未更新，请重试。",
   "Jump to bottom": "跳转到底部",
   "Scroll failed: {reason}": "滚动失败：{reason}",
