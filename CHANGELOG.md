@@ -10,12 +10,13 @@ installs update only to releases. Remote-PC runtime bundles are versioned separa
 
 - A native Mac app, as a trial build for Apple silicon: an AppKit window with the system's WebKit,
   drawn as the installed app is in Chrome, with the bridge inside. It joins the herdr plugin's
-  bridge when one runs. CI keeps each build as a download; see [docs/macos.md](docs/macos.md).
+  bridge when one runs. CI keeps each build as a download, and the 0.1.0 release carries one
+  (`T-Rex-0.1.0-arm64.zip`); see [docs/macos.md](docs/macos.md).
 
 ### Removed
 
-- The Electron Mac app. 0.1.0's `.dmg` and `.zip` downloads are withdrawn: T-Rex runs as a herdr
-  plugin or from a checkout. A release now carries its notes and GitHub's source archives only.
+- The Electron Mac app. 0.1.0's `.dmg` and `.zip` downloads are withdrawn; the native app's zip
+  took their place.
 
 ## [0.1.0] - 2026-10-23
 

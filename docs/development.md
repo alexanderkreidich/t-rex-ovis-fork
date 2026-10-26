@@ -373,9 +373,9 @@ push and remote PCs are not part of the demo.
 
 ## Releasing
 
-There is no release yet. A release will be a `vX.Y.Z` tag on `main` with its notes in
-[CHANGELOG.md](../CHANGELOG.md): installed updaters read Git tags directly, so never push one by
-hand before the release train exists (roadmap, Phase 3).
+A release is a `vX.Y.Z` tag on `main` with its notes in [CHANGELOG.md](../CHANGELOG.md);
+[Releases](#releases) says how to cut one. Installed updaters read Git tags directly, so tag only
+what is ready.
 
 Remote-PC runtime bundles are published by a `remote-vN` tag: when `server/`, `shared/`,
 `bun.lock` or `patches/` change what a bundle runs, raise `REMOTE_BUNDLE_VERSION` in

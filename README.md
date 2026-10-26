@@ -32,7 +32,9 @@ bun install
 bun run start       # builds, then serves on http://127.0.0.1:7317
 ```
 
-A native Mac app is in trial: [docs/macos.md](docs/macos.md) says how to download and open it.
+For now the only release download is the Mac app, for Apple silicon on macOS 15 or later:
+`T-Rex-0.1.0-arm64.zip` from [T-Rex 0.1.0](https://github.com/alexanderkreidich/t-rex/releases/tag/v0.1.0).
+There is no Intel, Windows or Linux build yet. [docs/macos.md](docs/macos.md) says how to open it.
 
 ## Develop
 

@@ -2,15 +2,19 @@
 
 T-Rex for the Mac (`macos/`): a native window, Swift and AppKit with the system's WebKit, on the
 same bridge and client the browser uses. It looks as the installed app does in Chrome: no title
-bar, the window's buttons on T-Rex's top bar. A trial build: CI builds it, it is not released.
+bar, the window's buttons on T-Rex's top bar. A trial build: the
+[0.1.0 release](https://github.com/alexanderkreidich/t-rex/releases/tag/v0.1.0) carries one, and CI
+builds one for every change.
 
 ## Try it
 
 Needs a Mac with Apple silicon, macOS 15 or later, and [herdr](https://herdr.dev) installed.
 
-1. Open the latest green [Mac app run](https://github.com/alexanderkreidich/t-rex/actions/workflows/mac-app.yml)
-   (signed in to GitHub) and download **T-Rex-mac-arm64** under Artifacts. It holds
-   `T-Rex-arm64.zip`; open it, and move `T-Rex.app` to Applications.
+1. Download `T-Rex-0.1.0-arm64.zip` from the
+   [0.1.0 release](https://github.com/alexanderkreidich/t-rex/releases/tag/v0.1.0), open it, and
+   move `T-Rex.app` to Applications. A newer build of `main` is under Artifacts of the latest green
+   [Mac app run](https://github.com/alexanderkreidich/t-rex/actions/workflows/mac-app.yml)
+   (signed in to GitHub): **T-Rex-mac-arm64** holds `T-Rex-arm64.zip`.
 2. The app is not signed with an Apple Developer ID yet, so macOS refuses to open a downloaded copy
    until its download mark is cleared once:
 
@@ -91,8 +95,9 @@ nor a bridge of yours.
 
 ## Not yet
 
-- Apple silicon only, as a CI artifact: no release, no Intel build, no Developer ID signature or
-  notarization.
+- Apple silicon only: no Intel build, no Developer ID signature or notarization. The release
+  workflow does not attach the app: 0.1.0's zip, CI's build of `main` at 2cd5675, was added by
+  hand.
 - The app does not update itself; Settings → Updates says to use the plugin or `bun run start`.
 - Push alerts need a service worker, which WebKit gives an app's page only with a few entitlements
   this build does not have; the bell's in-page alerts work.
