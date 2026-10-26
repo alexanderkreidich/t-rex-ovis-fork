@@ -10,6 +10,7 @@ for script in \
   terminal-viewport-regression \
   terminal-pinch-regression \
   terminal-command-arrows-regression \
+  app-shortcuts-regression \
   terminal-arrows-clicks-regression \
   sticky-modifiers-regression \
   pane-find-regression \

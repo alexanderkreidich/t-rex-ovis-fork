@@ -19,9 +19,9 @@ export const SHORTCUTS = [
   // Mod+Shift+N keeps working where the browser lets it through (the installed app), but Chrome
   // keeps Ctrl+Shift+N for a new incognito window in a tab: O is the one shown, and works in both
   { id: "new-session", label: "New workspace", keys: ["Mod", "Shift", "O"] },
-  // New tab and Split pane down have no default key: the free Mod+Shift letters are few, so each
-  // person picks one in Settings. Split pane right is Mod+D, as in Ghostty and iTerm2 on a Mac
-  { id: "new-tab", label: "New tab", keys: [] },
+  // Mod+N makes a tab where the host passes it through; a normal browser tab may keep it for New window.
+  // Split pane down stays unbound; Split pane right is Mod+D, as in Ghostty and iTerm2 on a Mac.
+  { id: "new-tab", label: "New tab", keys: ["Mod", "N"] },
   { id: "split-right", label: "Split pane right", keys: ["Mod", "D"] },
   { id: "split-down", label: "Split pane down", keys: [] },
   { id: "previous-pane", label: "Previous pane", keys: ["Mod", "Shift", "ArrowUp"] },
@@ -65,6 +65,7 @@ const KEY_TO_ID: Readonly<Record<string, ShortcutId>> = {
 const DEFAULT_CHORDS: Readonly<Partial<Record<ShortcutId, string>>> = {
   palette: "ctrl+f",
   "toggle-sidebar": "mod+b",
+  "new-tab": "mod+n",
   "split-right": "mod+d",
 };
 
@@ -196,6 +197,13 @@ export function keepsArrowsForText(target: KeyTargetLike | EventTarget | null): 
  */
 export function isAppShortcut(event: ShortcutEventLike, overrides: ShortcutOverrides = {}): boolean {
   return matchShortcut(event, isMacPlatform(), overrides) !== null;
+}
+
+/** Let the browser scale the whole app: Kitty key reporting must not consume its zoom chords. */
+export function isBrowserZoomShortcut(event: ShortcutEventLike, platformIsMac = isMacPlatform()): boolean {
+  if (event.isComposing || event.keyCode === 229 || event.altKey) return false;
+  const hasMod = platformIsMac ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+  return hasMod && (event.key === "-" || event.key === "=" || event.key === "+");
 }
 
 export { isMacPlatform };
