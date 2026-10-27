@@ -1,5 +1,6 @@
 import type { AlertPrefs } from "../../shared/notify-policy.ts";
 import { ApiError, fetchPushKey, registerPushSubscription, sendTestPush, unregisterPushSubscription } from "./api.ts";
+import { nativeNotifications } from "./nativeNotifications.ts";
 
 /**
  * This device's web push subscription: pane alerts that arrive with the app closed.
@@ -13,7 +14,7 @@ import { ApiError, fetchPushKey, registerPushSubscription, sendTestPush, unregis
 const WORKER_READY_TIMEOUT_MS = 10_000;
 
 export function pushSupported(): boolean {
-  return typeof navigator !== "undefined" && "serviceWorker" in navigator && typeof globalThis.PushManager !== "undefined";
+  return !nativeNotifications() && typeof navigator !== "undefined" && "serviceWorker" in navigator && typeof globalThis.PushManager !== "undefined";
 }
 
 /** Test the existing subscription without repairing it first, so stale registrations stay visible. */

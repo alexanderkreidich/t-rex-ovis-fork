@@ -11,6 +11,7 @@ import WebKit
 final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
   private let webView: WKWebView
   private let content: WindowContent
+  private let notifications: DesktopNotifications
   private let snapshot: URL?
   private var origin: URL?
   /** the middle of the page's top bar, in points from the window's top; nil until the page says */
@@ -38,6 +39,7 @@ final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNaviga
     webView.underPageBackgroundColor = Theme.fallback
     webView.pageZoom = UserDefaults.standard.object(forKey: Self.zoomKey) as? CGFloat ?? 1
     content = WindowContent(webView: webView)
+    notifications = DesktopNotifications(webView: webView, enabled: snapshot == nil)
 
     let window = TRexWindow(
       contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
@@ -57,6 +59,8 @@ final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNaviga
     webView.navigationDelegate = self
     webView.uiDelegate = self
     scripts.add(WeakHandler(self), name: "trex")
+    scripts.addScriptMessageHandler(notifications, contentWorld: .page, name: "trexNotifications")
+    notifications.activate = { [weak self] in self?.present() }
     if snapshot == nil {
       if !window.setFrameUsingName("T-Rex") { window.center() }
       window.setFrameAutosaveName("T-Rex")
@@ -91,6 +95,7 @@ final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNaviga
 
   func load(_ origin: URL) {
     self.origin = origin
+    notifications.origin = origin
     webView.load(URLRequest(url: origin))
   }
 
@@ -118,6 +123,7 @@ final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNaviga
       // Keep WebKit on the system appearance; overriding the window pins prefers-color-scheme.
       window?.standardWindowButton(.closeButton)?.superview?.appearance = NSAppearance(named: (body["dark"] as? Bool ?? true) ? .darkAqua : .aqua)
     case "ready":
+      notifications.pageReady()
       // what scripts/mac-app-smoke.ts waits for: the window shows T-Rex from this bridge
       print("T-Rex: the window shows \(webView.url?.absoluteString ?? "")")
       fflush(stdout)
@@ -189,6 +195,7 @@ final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNaviga
   }
 
   func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+    notifications.pageLoading()
     // a new page has none of the last one's state: it learns the room again
     reserved = nil
     content.bar = nil

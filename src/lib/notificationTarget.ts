@@ -1,4 +1,5 @@
 import type { AppLink } from "./deepLink.ts";
+import { nativeNotifications } from "./nativeNotifications.ts";
 
 /** `workspace_id`: the workspace the pane was last seen in (server/push.ts), so an ended pane's tap opens it. */
 export type NotificationTarget = { machine_id: string; pane_id: string; workspace_id?: string };
@@ -69,5 +70,5 @@ export function notificationTargets(source?: MessageSource): (select: Select) =>
 // Browser messages can arrive after document loading but before React's effect.
 // Install this listener while App's module loads, before creating its root.
 export const onNotificationTarget = notificationTargets(
-  typeof navigator !== "undefined" && "serviceWorker" in navigator ? navigator.serviceWorker : undefined,
+  nativeNotifications()?.targets ?? (typeof navigator !== "undefined" && "serviceWorker" in navigator ? navigator.serviceWorker : undefined),
 );

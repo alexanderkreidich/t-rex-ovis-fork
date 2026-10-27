@@ -615,6 +615,8 @@ export const JA: Record<string, string> = {
   "This browser can't keep the screen on.": "このブラウザーでは画面をオンに保てません。",
   "Test notification": "テスト通知",
   "Check whether this device can receive push alerts": "このデバイスでプッシュ通知を受け取れるか確認します",
+  "Desktop alerts while T-Rex is running.": "T-Rexの実行中にデスクトップ通知を受け取ります。",
+  "Allow notifications for T-Rex in macOS System Settings, then try again.": "macOSのシステム設定でT-Rexの通知を許可してから、もう一度お試しください。",
   "Sending…": "送信中…",
   "Send test": "テスト送信",
   "Push alerts need HTTPS or localhost, and on iPhone the home-screen app.": "プッシュ通知には HTTPS または localhost が必要です。iPhone ではホーム画面に追加したアプリを使ってください。",

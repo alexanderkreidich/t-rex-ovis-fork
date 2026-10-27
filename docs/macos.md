@@ -63,6 +63,24 @@ Logs are in `~/Library/Logs/T-Rex/` (`bridge.log`, `herdr.log`).
   working, and the menu's ⌘Q, ⌘W, ⌘M and ⌘H work where the page does not take them.
 - Safari's Web Inspector reaches the page (Develop → T-Rex).
 
+## Notifications
+
+The Mac window uses macOS notifications, not WebKit's Web Notification permission (which WebKit
+refuses in this app). In Settings → Alerts, use **Send test** or **Turn alerts on again** and allow
+T-Rex's macOS permission prompt. If permission was denied, enable T-Rex in System Settings →
+Notifications, then return to the app. Keep the app in `/Applications` or `~/Applications`: macOS
+may refuse notification permission for an uninstalled trial copy in a temporary/build folder.
+In System Settings → Notifications, choose **Allow Notifications** for **when mirroring or
+sharing the display** if alerts should appear during screen capture or screen sharing too. This
+is a system-wide choice; other permitted apps can then show their alerts while sharing as well.
+
+An agent finishing or needing input alerts while T-Rex is in the background, minimized or closed
+to the Dock. A visible, active window does not repeat what it already shows; **Send test** does
+show a banner there. Clicking an alert opens its PC and pane, or the workspace if the pane has
+ended. The banner's title is the tab's name (or the pane's title when the tab has only a number),
+its second line names the workspace/session and PC, and its body says whether work finished or
+input is needed. Alerts need the app to keep running: quitting it stops this local notification path.
+
 ## Build it
 
 ```bash
@@ -96,5 +114,5 @@ nor a bridge of yours.
 - Apple silicon only, as a CI artifact: no release, no Intel build, no Developer ID signature or
   notarization.
 - The app does not update itself; Settings → Updates says to use the plugin or `bun run start`.
-- Push alerts need a service worker, which WebKit gives an app's page only with a few entitlements
-  this build does not have; the bell's in-page alerts work.
+- Web push with the app quit needs a service worker, which WebKit gives an app's page only with a
+  few entitlements this build does not have. The Mac notifications above work while the app runs.

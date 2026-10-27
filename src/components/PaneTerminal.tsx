@@ -31,7 +31,7 @@ import { terminalColorsTheme, terminalDisplayTheme } from "../lib/restty/theme.t
 import { ResttyTerminal } from "../lib/restty/terminal.ts";
 import type { TerminalScreen } from "../lib/terminalScreen.ts";
 import { useT } from "../lib/i18n.ts";
-import { isAppShortcut } from "../lib/shortcuts.ts";
+import { isAppShortcut, isBrowserZoomShortcut } from "../lib/shortcuts.ts";
 import { keyboardHoldsGrid, keyboardUp } from "../lib/keyboard.ts";
 import { isWebLink, openWebLink, webLinkAt } from "../lib/terminalLinks.ts";
 import { keepDeleteRepeatText, keyboardNeedsText, restoreDeleteRepeatCaret } from "../lib/deleteRepeat.ts";
@@ -456,7 +456,7 @@ export function PaneTerminal({
     /** restty holds a selection: a drag made one; a click or a key ends it */
     let selectionActive = false;
     onKey = (event) => {
-      if (isAppShortcut(event, shortcutSettings.current)) return false;
+      if (isAppShortcut(event, shortcutSettings.current) || isBrowserZoomShortcut(event, isMac)) return false;
       if (event.type === "keydown" && event.keyCode === 229 && keyboardNeedsText(navigator)) restoreDeleteRepeatCaret(textarea);
       const composing = composingRef.current || event.isComposing || event.keyCode === 229;
       // restty has already sent compositionend's text before the next key reaches this hook.

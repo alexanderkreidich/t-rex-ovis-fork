@@ -8,6 +8,26 @@
   const root = document.documentElement;
   root.dataset.trexMac = "";
   window.__trexMac = { reserve: (px) => root.style.setProperty("--trex-mac-reserve", `${px}px`) };
+  const notificationHandler = window.webkit.messageHandlers.trexNotifications;
+  if (notificationHandler) {
+    const targets = new EventTarget();
+    const notifications = {
+      permission: "default",
+      targets,
+      requestPermission: async () => updatePermission(await notificationHandler.postMessage({ kind: "requestPermission" })),
+      show: (notification) => notificationHandler.postMessage({ kind: "show", ...notification }),
+      clicked: (target) => targets.dispatchEvent(new MessageEvent("message", { data: { type: "select-pane", ...target } })),
+    };
+    const updatePermission = (permission) => {
+      notifications.permission = permission;
+      window.dispatchEvent(new Event("trex-notification-permission"));
+      return permission;
+    };
+    const refreshPermission = () => notificationHandler.postMessage({ kind: "permission" }).then(updatePermission).catch(() => {});
+    window.__trexMac.notifications = notifications;
+    addEventListener("focus", refreshPermission);
+    refreshPermission();
+  }
   // what takes a click in the bar: styles.css's list for Chrome's window controls overlay, and tabs
   const CONTROLS = "button, a, input, select, textarea, [tabindex], [draggable='true'], [role='tab']";
   const box = (rect) => [rect.left, rect.top, rect.width, rect.height];
