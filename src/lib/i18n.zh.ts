@@ -617,6 +617,8 @@ export const ZH: Record<string, string> = {
   "This browser can't keep the screen on.": "此浏览器无法保持屏幕常亮。",
   "Test notification": "测试通知",
   "Check whether this device can receive push alerts": "检查此设备能否接收推送通知",
+  "Desktop alerts while T-Rex is running.": "在 T-Rex 运行时接收桌面通知。",
+  "Allow notifications for T-Rex in macOS System Settings, then try again.": "请在 macOS 系统设置中允许 T-Rex 发送通知，然后重试。",
   "Sending…": "正在发送…",
   "Send test": "发送测试",
   "Push alerts need HTTPS or localhost, and on iPhone the home-screen app.": "推送通知需要 HTTPS 或 localhost。在 iPhone 上请使用添加到主屏幕的应用。",

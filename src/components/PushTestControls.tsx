@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ApiError } from "../lib/api.ts";
 import { useT } from "../lib/i18n.ts";
+import { nativeNotifications } from "../lib/nativeNotifications.ts";
+import { notificationState } from "../lib/notifications.ts";
 import { pushSupported, testDevicePush } from "../lib/push.ts";
 import { useSettings } from "../lib/settings.ts";
 
@@ -10,15 +12,21 @@ export function PushTestControls({ onEnable }: { onEnable: () => Promise<boolean
   const { settings } = useSettings();
   const t = useT();
   const [result, setResult] = useState<Result>(null);
-  const supported = pushSupported();
-  const denied = globalThis.Notification?.permission === "denied";
+  const native = nativeNotifications();
+  const supported = !!native || pushSupported();
+  const denied = notificationState() === "denied";
   const busy = result === "sending";
-  const enable = !settings.alertsOn || result === "missing" || result === "gone" || result === "permission";
+  const enable = !settings.alertsOn || native?.permission === "default" || result === "missing" || result === "gone" || result === "permission";
 
   const send = async (repair: boolean) => {
     setResult("sending");
     try {
-      if (repair) setResult(await onEnable() ? "sent" : "failed");
+      if (native) {
+        if (repair || native.permission !== "granted") await onEnable();
+        if (native.permission !== "granted") { setResult("permission"); return; }
+        await native.show({ title: "T-Rex", body: t("Test notification"), tag: "t-rex:test", test: true });
+        setResult("sent");
+      } else if (repair) setResult(await onEnable() ? "sent" : "failed");
       else setResult(await testDevicePush());
     } catch (error) {
       // gone: the push service retired the endpoint; Turn alerts on again subscribes this device anew
@@ -32,11 +40,11 @@ export function PushTestControls({ onEnable }: { onEnable: () => Promise<boolean
       <div className="settings-row">
         <div className="settings-row-text">
           <span className="settings-label">{t("Test notification")}</span>
-          <span className="settings-description">{t("Check whether this device can receive push alerts")}</span>
+          <span className="settings-description">{native ? t("Desktop alerts while T-Rex is running.") : t("Check whether this device can receive push alerts")}</span>
           {/* always in the document, empty until there is something to say: a live region */}
           <span className="settings-hint" role="status">
             {!supported || result === "unsupported" ? t("Push alerts need HTTPS or localhost, and on iPhone the home-screen app.")
-              : denied ? t("Allow notifications in your browser settings, then try again.")
+              : denied ? native ? t("Allow notifications for T-Rex in macOS System Settings, then try again.") : t("Allow notifications in your browser settings, then try again.")
               : result === "sent" ? t("Test notification sent. Check this device for the alert.")
               : result === "missing" ? t("This device's push subscription is missing. Turn alerts on again.")
               : result === "gone" ? t("The push service retired this device's subscription. Turn alerts on again to make a new one.")

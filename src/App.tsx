@@ -42,6 +42,7 @@ import { paneContextPress } from "./lib/paneCanvas.ts";
 import type { AppActions, PaneControls } from "./lib/actions.ts";
 import {
   notificationState,
+  paneNotificationHeading,
   requestNotificationPermission,
   shouldNotifyStatus,
   alertStatus,
@@ -52,6 +53,7 @@ import {
 } from "./lib/notifications.ts";
 import { ensurePushSubscription, pushSupported, removePushSubscription } from "./lib/push.ts";
 import { machineGone, notificationLanding, sameLink, onNotificationTarget, type NotificationTarget } from "./lib/notificationTarget.ts";
+import { nativeNotifications } from "./lib/nativeNotifications.ts";
 import { useUpdates } from "./lib/updates.ts";
 import { UpdateNotice } from "./components/UpdateControls.tsx";
 import { LanExposureNotice } from "./components/LanExposureNotice.tsx";
@@ -516,7 +518,7 @@ export function App() {
         const status = alertStatus(message.agent_status, message.background_wait);
         statusRef.current.set(key, status);
         const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
-        if (pane && shouldNotifyStatus(previous, status) && alertsOnRef.current && !pushOnRef.current && alertsAllow(alertsRef.current, status)) showPaneStatusNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, status, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
+        if (pane && shouldNotifyStatus(previous, status) && alertsOnRef.current && !pushOnRef.current && alertsAllow(alertsRef.current, status)) showPaneStatusNotification(message.pane_id, paneNotificationHeading(machine, pane, alertPaneTitle(pane)), status, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
         setMachines((list) => {
           let changed = false;
           const next = list.map((m) => {
@@ -533,7 +535,7 @@ export function App() {
       }
       if (message.type === "pane-exited" && alertsOnRef.current && !pushOnRef.current && alertsRef.current.done !== "off") {
         const pane = machine.snapshot?.panes.find((p) => p.pane_id === message.pane_id);
-        if (pane) showPaneEndedNotification(message.pane_id, `${machine.name} · ${alertPaneTitle(pane)}`, () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
+        if (pane) showPaneEndedNotification(message.pane_id, paneNotificationHeading(machine, pane, alertPaneTitle(pane)), () => takeNotificationTargetRef.current({ machine_id: machine.id, pane_id: message.pane_id, workspace_id: pane.workspace_id }), machine.id, pane.workspace_id);
       }
       if (message.type === "session-changed" || message.type === "pane-exited") scheduleRefetch();
     };
@@ -544,6 +546,13 @@ export function App() {
     if (message.type === "error" && message.code === "output_stalled") setOutputStopped(true);
   }, []);
 
+  useEffect(() => {
+    const refresh = () => setNotifications(notificationState());
+    window.addEventListener("trex-notification-permission", refresh);
+    refresh();
+    return () => window.removeEventListener("trex-notification-permission", refresh);
+  }, []);
+
   const enableNotifications = useCallback(async () => {
     const current = notificationState();
     const next = current === "default" ? await requestNotificationPermission() : current;
@@ -551,6 +560,7 @@ export function App() {
     // alerts are notifications: without the browser's permission the switch stays off
     if (next !== "granted") return false;
     updateSettings({ alertsOn: true });
+    if (nativeNotifications()) return true;
     try {
       const endpoint = await ensurePushSubscription(alertsRef.current);
       setPushOn(endpoint !== null);

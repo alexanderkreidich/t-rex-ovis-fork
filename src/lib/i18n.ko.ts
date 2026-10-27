@@ -613,6 +613,8 @@ export const KO: Record<string, string> = {
   "This browser can't keep the screen on.": "이 브라우저는 화면을 켜 둘 수 없습니다.",
   "Test notification": "테스트 알림",
   "Check whether this device can receive push alerts": "이 기기가 푸시 알림을 받을 수 있는지 확인합니다",
+  "Desktop alerts while T-Rex is running.": "T-Rex가 실행 중일 때 데스크톱 알림을 받습니다.",
+  "Allow notifications for T-Rex in macOS System Settings, then try again.": "macOS 시스템 설정에서 T-Rex 알림을 허용한 뒤 다시 시도하세요.",
   "Sending…": "보내는 중…",
   "Send test": "테스트 보내기",
   "Push alerts need HTTPS or localhost, and on iPhone the home-screen app.": "푸시 알림은 HTTPS 또는 localhost가 필요하고, iPhone에서는 홈 화면 앱이어야 합니다.",

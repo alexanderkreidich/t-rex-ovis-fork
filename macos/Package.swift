@@ -16,5 +16,10 @@ let package = Package(
         .enableUpcomingFeature("InferIsolatedConformances"),
       ]
     ),
+    .testTarget(
+      name: "TRexTests",
+      dependencies: ["TRex"],
+      swiftSettings: [.defaultIsolation(MainActor.self)]
+    ),
   ]
 )

@@ -47,6 +47,7 @@ jobs:
           echo "$RUNNER_TEMP/herdr-bin" >> "$GITHUB_PATH"
       - run: bun install --frozen-lockfile
       - run: bun run typecheck && bun run build
+      - run: swift test --package-path macos
       - run: bun run build:mac
       - name: Open the app
         env:
