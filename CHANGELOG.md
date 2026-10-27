@@ -12,6 +12,12 @@ installs update only to releases. Remote-PC runtime bundles are versioned separa
   drawn as the installed app is in Chrome, with the bridge inside. It joins the herdr plugin's
   bridge when one runs. CI keeps each build as a download; see [docs/macos.md](docs/macos.md).
 
+### Fixed
+
+- Switching tabs no longer grows the page's memory in Safari and the Mac app: WebKit never frees a
+  WebGPU canvas, so each terminal now draws on a canvas a closed one left behind (about 30 MB kept
+  per switch before).
+
 ### Removed
 
 - The Electron Mac app. 0.1.0's `.dmg` and `.zip` downloads are withdrawn: T-Rex runs as a herdr
