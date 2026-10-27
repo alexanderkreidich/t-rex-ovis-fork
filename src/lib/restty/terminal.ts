@@ -47,6 +47,16 @@ function estimatedMetrics(fontSize: number, dpr: number): CellMetrics {
 
 const dpr = (): number => (typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
 
+/**
+ * WebGPU canvases closed terminals drew on, for the next terminals to draw on. WebKit never gives
+ * back a WebGPU canvas's swapchain (three buffers the canvas's size, ~30 MB for a pane on a Retina
+ * screen): not when its context is unconfigured, its device destroyed or the canvas collected. A
+ * new canvas per terminal grew the Mac app's page by that much on every switch to a tab not kept
+ * mounted; a reused canvas keeps the buffers it has. The list is never longer than the most
+ * terminals open at once.
+ */
+const spareCanvases: HTMLCanvasElement[] = [];
+
 export class ResttyTerminal {
   /** the terminal's box: the canvas and the IME field restty types from */
   readonly element: HTMLDivElement;
@@ -96,7 +106,8 @@ export class ResttyTerminal {
     const doc = parent.ownerDocument;
     this.element = doc.createElement("div");
     this.element.className = "restty-terminal";
-    const canvas = doc.createElement("canvas");
+    // a spare canvas holds a WebGPU context: a terminal set to WebGL2 takes a new one
+    const canvas = (options.renderer === "webgl2" ? undefined : spareCanvases.pop()) ?? doc.createElement("canvas");
     // restty swaps the canvas for a new one when it falls back from WebGPU: it keeps the class only
     canvas.className = "restty-terminal-canvas";
     canvas.tabIndex = 0;
@@ -449,8 +460,18 @@ export class ResttyTerminal {
     this.element.removeEventListener("keyup", this.onKeyEvent);
     this.resizeListeners.clear();
     this.readyListeners.clear();
+    // the canvas goes to the next terminal unless it holds a WebGL2 context (one that never started holds none)
+    const spare = !this.runtime || this.backend === "webgpu" ? this.canvas : null;
     this.runtime?.lifecycle.destroy();
     this.runtime = null;
     this.element.remove();
+    if (spare) {
+      spare.remove();
+      spare.removeAttribute("style");
+      // a new size drops the last frame drawn
+      spare.width = 1;
+      spare.height = 1;
+      spareCanvases.push(spare);
+    }
   }
 }
