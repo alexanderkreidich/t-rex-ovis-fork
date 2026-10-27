@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { bindingDisplayKeys, isAppShortcut, shortcutEventKey, isMacPlatform, matchShortcut, type ShortcutEventLike, keepsArrowsForText, keepsKeyForText, shortcutConflict, shortcutDisplayKeys, shortcutKeys } from "./shortcuts.ts";
+import { bindingDisplayKeys, isAppShortcut, isBrowserZoomShortcut, shortcutEventKey, isMacPlatform, matchShortcut, type ShortcutEventLike, keepsArrowsForText, keepsKeyForText, shortcutConflict, shortcutDisplayKeys, shortcutKeys } from "./shortcuts.ts";
 import { isReservedShortcutKey, sanitizeShortcutOverrides } from "./shortcutBindings.ts";
 
 function keyEvent(key: string, patch: Partial<ShortcutEventLike> = {}): ShortcutEventLike {
@@ -226,8 +226,25 @@ it("pages the selected pane with fixed Mod+Shift bindings, remapping and disabli
 });
 
 describe("new tab and split pane", () => {
-  it("have no key until one is chosen in Settings, and then work like any other binding", () => {
-    for (const id of ["new-tab", "split-down"] as const) {
+  it("makes a new tab with Mod+N without changing the workspace shortcuts", () => {
+    for (const apple of [true, false]) {
+      const press = (patch: Partial<ShortcutEventLike> = {}, overrides = {}) => matchShortcut(keyEvent("n", { metaKey: apple, ctrlKey: !apple, shiftKey: false, ...patch }), apple, overrides);
+      expect(press()).toBe("new-tab");
+      expect(press({ key: "т", code: "KeyN" })).toBe("new-tab");
+      expect(press({ shiftKey: true })).toBe("new-session");
+      for (const patch of [{ altKey: true }, { isComposing: true }, { keyCode: 229 }, { metaKey: true, ctrlKey: true }]) {
+        expect(press(patch)).toBeNull();
+      }
+      expect(press({}, { "new-tab": null })).toBeNull();
+      expect(press({}, { "new-tab": "y" })).toBeNull();
+      expect(shortcutKeys("new-tab", {}, apple)).toEqual([apple ? "meta+n" : "ctrl+n"]);
+    }
+    expect(shortcutDisplayKeys("new-tab", {})).toEqual(["Mod", "N"]);
+    expect(matchShortcut(keyEvent("n", { ctrlKey: true, shiftKey: false }), true)).toBeNull();
+  });
+
+  it("leaves Split down unbound and lets Settings rebind new tabs and splits", () => {
+    for (const id of ["split-down"] as const) {
       expect(shortcutKeys(id, {})).toEqual([]);
       expect(shortcutDisplayKeys(id, {})).toEqual([]);
     }
@@ -240,6 +257,25 @@ describe("new tab and split pane", () => {
     expect(shortcutDisplayKeys("new-tab", overrides)).toEqual(["Mod", "Shift", "Y"]);
     expect(shortcutConflict("split-down", ["y"], overrides)).toBe(true);
     expect(shortcutConflict("new-tab", ["k"], {})).toBe(true);
+  });
+});
+
+describe("browser zoom", () => {
+  it("keeps Mod+minus, Mod+equals and Mod+plus native, including numpad and Shift+plus", () => {
+    for (const apple of [true, false]) {
+      for (const [key, code, shiftKey] of [["-", "Minus", false], ["=", "Equal", false], ["+", "Equal", true], ["+", "NumpadAdd", false], ["-", "NumpadSubtract", false]] as const) {
+        expect(isBrowserZoomShortcut(keyEvent(key, { code, metaKey: apple, ctrlKey: !apple, shiftKey }), apple)).toBe(true);
+      }
+    }
+  });
+
+  it("does not take terminal Control keys on a Mac, extra modifiers, or IME input", () => {
+    for (const apple of [true, false]) {
+      const press = (patch: Partial<ShortcutEventLike> = {}) => isBrowserZoomShortcut(keyEvent("-", { metaKey: apple, ctrlKey: !apple, shiftKey: false, ...patch }), apple);
+      for (const patch of [{ metaKey: false, ctrlKey: false }, { metaKey: !apple, ctrlKey: apple }, { metaKey: true, ctrlKey: true }, { altKey: true }, { isComposing: true }, { keyCode: 229 }, { key: "_" }, { key: "n" }]) {
+        expect(press(patch)).toBe(false);
+      }
+    }
   });
 });
 
