@@ -4357,6 +4357,80 @@
           ],
           "type": "object"
         },
+        "TerminalColor": {
+          "properties": {
+            "b": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "g": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "r": {
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "r",
+            "g",
+            "b"
+          ],
+          "type": "object"
+        },
+        "TerminalDisplayTheme": {
+          "properties": {
+            "background": {
+              "$ref": "#/schemas/request/$defs/TerminalColor"
+            },
+            "foreground": {
+              "$ref": "#/schemas/request/$defs/TerminalColor"
+            },
+            "palette": {
+              "items": {
+                "$ref": "#/schemas/request/$defs/TerminalColor"
+              },
+              "maxItems": 16,
+              "minItems": 16,
+              "type": "array"
+            }
+          },
+          "required": [
+            "foreground",
+            "background",
+            "palette"
+          ],
+          "type": "object"
+        },
+        "TerminalThemeSetParams": {
+          "properties": {
+            "terminal_id": {
+              "type": "string"
+            },
+            "theme": {
+              "anyOf": [
+                {
+                  "$ref": "#/schemas/request/$defs/TerminalDisplayTheme"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Null restores the inherited host theme. An override also ends when the direct attach leaves."
+            }
+          },
+          "required": [
+            "terminal_id"
+          ],
+          "type": "object"
+        },
         "ToastHerdrPosition": {
           "enum": [
             "top-left",
@@ -4897,6 +4971,22 @@
             },
             "params": {
               "$ref": "#/schemas/request/$defs/ClientShellSurfaceSetParams"
+            }
+          },
+          "required": [
+            "method",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "method": {
+              "const": "terminal.theme.set",
+              "type": "string"
+            },
+            "params": {
+              "$ref": "#/schemas/request/$defs/TerminalThemeSetParams"
             }
           },
           "required": [
@@ -10449,6 +10539,11 @@
             "surface_interest": {
               "default": false,
               "description": "Whether this server supports explicit client-shell surface interest.",
+              "type": "boolean"
+            },
+            "terminal_theme": {
+              "default": false,
+              "description": "Supports attachment-scoped terminal colours through `terminal.theme.set`.",
               "type": "boolean"
             }
           },

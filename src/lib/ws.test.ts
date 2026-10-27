@@ -790,6 +790,55 @@ function liveClient(features: string[]): { client: HerdrSocket; socket: FakeSock
   return { client, socket };
 }
 const pings = (socket: FakeSocket) => socket.sent.filter((frame) => frame.type === "ping");
+const displayTheme = (background = 26) => ({
+  foreground: { r: 192, g: 202, b: 245 }, background: { r: background, g: background, b: background },
+  palette: Array.from({ length: 16 }, () => ({ r: 122, g: 162, b: 247 })),
+});
+
+it("carries terminal colours with attach/resize and reconnects with only the newest palette", () => {
+  jest.useFakeTimers();
+  const client = new HerdrSocket("ws://test/ws");
+  const dark = displayTheme();
+  const light = displayTheme(240);
+  client.setTerminalTheme("w1:p1", dark);
+  client.attach("w1:p1", 100, 30);
+  client.connect();
+  const socket = FakeSocket.last;
+  socket.open();
+  socket.receive(snapshot([]));
+  try {
+    expect(socket.sent.find((frame) => frame.type === "attach")?.theme).toEqual(dark);
+    client.setTerminalTheme("w1:p1", light);
+    expect(socket.sent.at(-1)).toEqual({ type: "resize", pane_id: "w1:p1", cols: 100, rows: 30, theme: light });
+    socket.disconnect();
+    const newest = displayTheme(40);
+    client.setTerminalTheme("w1:p1", newest);
+    jest.advanceTimersByTime(30_000);
+    const fresh = FakeSocket.last;
+    fresh.open();
+    expect(fresh.sent.find((frame) => frame.type === "attach")?.theme).toEqual(newest);
+    expect(fresh.sent.filter((frame) => frame.type === "resize")).toEqual([]);
+    expect(submissions(socket)).toEqual([]);
+    expect(submissions(fresh)).toEqual([]);
+  } finally { client.close(); jest.useRealTimers(); }
+});
+
+it("remembers observer and covered-pane palettes without reclaiming the active grid", () => {
+  const { client, socket } = liveClient([]);
+  try {
+    client.setMode("observe");
+    client.setTerminalTheme("w1:p1", displayTheme());
+    expect(socket.sent.filter((frame) => frame.type === "resize")).toEqual([]);
+    client.setMode("interact");
+    client.keepSize("w1:p1");
+    const theme = displayTheme(240);
+    client.setTerminalTheme("w1:p1", theme);
+    expect(socket.sent.filter((frame) => frame.type === "resize")).toEqual([]);
+    client.resize("w1:p1", 100, 30);
+    expect(socket.sent.at(-1)?.theme).toEqual(theme);
+    expect(submissions(socket)).toEqual([]);
+  } finally { client.close(); }
+});
 
 it("acknowledges synced screens and resumes from the newest one after a reconnect, never once detached", () => {
   jest.useFakeTimers();

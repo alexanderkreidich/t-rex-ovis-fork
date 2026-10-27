@@ -43,6 +43,8 @@ const ROOTS: Record<string, string[]> = {
     "PaneSendKeysParams",
     "EventsSubscribeParams",
     "Subscription",
+    "TerminalDisplayTheme",
+    "TerminalThemeSetParams",
   ],
 };
 

@@ -4,6 +4,8 @@
  * sent.
  */
 import type { ClientMessage, ServerMessage } from "../../shared/protocol.ts";
+import { validTerminalTheme } from "../../shared/terminal-theme.ts";
+import { HerdrError, terminalSetTheme } from "../herdr/client.ts";
 import { TerminalDisplay } from "../../shared/ssp-display.ts";
 import { type SightingFacts, sightingFacts } from "../input-guard.ts";
 import type { GraphicsChunk } from "../../shared/ssp-assets.ts";
@@ -64,6 +66,40 @@ export function createTerminalRegistry({ clients, stopped, terminalAttach, holdF
   end: (client: Client, reason: "stalled" | "revoked" | "closed") => void;
 }) {
   const attachments = new Map<string, PaneAttachment>();
+  const themeWrites = new WeakMap<PaneAttachment, { process: unknown; driver?: Client; claim?: unknown; key?: string; tail: Promise<void> }>();
+
+  function syncTheme(paneId: string): void {
+    const attachment = attachments.get(paneId);
+    if (attachment?.kind !== "pty" || !attachment.ready || attachment.held || !attachment.terminalId) return;
+    const driver = attachment.driver;
+    const claim = driver?.data.attached.get(paneId);
+    const theme = driver && connectionOf(driver).mode === "interact" && !connectionOf(driver).closing && !claim?.keepSize ? claim?.theme ?? null : null;
+    let state = themeWrites.get(attachment);
+    if (!theme && !state) return;
+    if (!state) {
+      state = { process: attachment.process, tail: Promise.resolve() };
+      themeWrites.set(attachment, state);
+    }
+    const process = attachment.process;
+    const terminalId = attachment.terminalId;
+    const key = JSON.stringify(theme);
+    if (state.process === process && state.driver === driver && state.claim === claim && state.key === key) return;
+    state.process = process;
+    state.driver = driver;
+    state.claim = claim;
+    state.key = key;
+    const queued = state;
+    const current = () => attachments.get(paneId) === attachment && attachment.process === process
+      && queued.key === key && attachment.ready && !attachment.held && attachment.driver === driver
+      && (!driver || (driver.data.attached.get(paneId) === claim && !claim?.keepSize
+        && connectionOf(driver).mode === "interact" && !connectionOf(driver).closing));
+    queued.tail = queued.tail.then(async () => {
+      if (current()) await terminalSetTheme(terminalId, theme, current);
+    }).catch((error: unknown) => {
+      if (queued.key === key) queued.key = undefined;
+      if (!(error instanceof HerdrError && error.code === "cancelled")) console.error(`terminal theme for ${paneId}: ${error instanceof Error ? error.message : String(error)}`);
+    });
+  }
 
   /** attachments still resolving their terminal, so concurrent attaches share one pty */
   const pendingAttachments = new Map<string, Promise<PaneAttachment>>();
@@ -126,6 +162,7 @@ export function createTerminalRegistry({ clients, stopped, terminalAttach, holdF
     const attachment = attachments.get(paneId);
     if (!attachment) return;
     for (const client of attachment.clients) send(client, message);
+    if (message.type === "input-ready" && message.ready !== false) syncTheme(paneId);
   }
 
   /** Stops syncing `client` with the pane; what it last had stays resumable for a while. */
@@ -194,6 +231,17 @@ export function createTerminalRegistry({ clients, stopped, terminalAttach, holdF
       attachment.driver = client;
     }
     resizePty(paneId, cols, rows);
+    syncTheme(paneId);
+  }
+
+  function releaseDriver(paneId: string, client: Client, attachment: PaneAttachment): void {
+    attachment.grids.delete(client);
+    if (attachment.driver !== client) return;
+    attachment.driver = undefined;
+    const next = [...attachment.grids].reverse().find(([other]) => connectionOf(other).mode === "interact"
+      && attachment.clients.has(other) && other.data.attached.get(paneId)?.keepSize === false);
+    if (next) drivePty(paneId, next[0], next[1].cols, next[1].rows);
+    else syncTheme(paneId);
   }
 
   function resizePty(paneId: string, cols: number, rows: number): void {
@@ -229,8 +277,7 @@ export function createTerminalRegistry({ clients, stopped, terminalAttach, holdF
     if (!attachment) return;
     attachment.clients.delete(client);
     attachment.stalled.delete(client);
-    attachment.grids.delete(client);
-    if (attachment.driver === client) attachment.driver = undefined;
+    releaseDriver(paneId, client, attachment);
     if (attachment.clients.size === 0) closeAttachment(paneId);
     else reconcileOutput(paneId);
   }
@@ -294,11 +341,16 @@ export function createTerminalRegistry({ clients, stopped, terminalAttach, holdF
         send(client, { type: "error", code: "invalid_geometry", message: "cols and rows must be integers in 1..1000" });
         return;
       }
+      if (message.theme !== undefined && !validTerminalTheme(message.theme)) {
+        send(client, { type: "error", code: "invalid_theme", message: "theme must contain RGB defaults and 16 ANSI colours" });
+        return;
+      }
       // record the pane before the await: a detach (switching panes) or a close
       // that lands while the terminal is looked up must cancel this attach, and
       // neither can see a client that only joins the attachment afterwards
-      const claim = client.data.attached.get(message.pane_id) ?? { keepSize: false };
+      const claim: { keepSize: boolean; theme?: Frame<"attach">["theme"] } = client.data.attached.get(message.pane_id) ?? { keepSize: false };
       claim.keepSize = message.keep_size === true;
+      if (message.theme !== undefined) claim.theme = message.theme;
       if (!client.data.attached.has(message.pane_id)) client.data.attached.set(message.pane_id, claim);
       let attachment: PaneAttachment;
       try {
@@ -401,11 +453,18 @@ export function createTerminalRegistry({ clients, stopped, terminalAttach, holdF
         send(client, { type: "error", code: "invalid_geometry", message: "cols and rows must be integers in 1..1000" });
         return;
       }
+      if (message.theme !== undefined && !validTerminalTheme(message.theme)) {
+        send(client, { type: "error", code: "invalid_theme", message: "theme must contain RGB defaults and 16 ANSI colours" });
+        return;
+      }
       // the pty is still being created (an attach that kept its size, then a resize before
       // the terminal was looked up): the resize waits for it. Dropped,
       // it would leave the pty at the pane's own grid under a terminal fitted to another.
       const claim = client.data.attached.get(message.pane_id);
-      if (claim) claim.keepSize = false;
+      if (claim) {
+        claim.keepSize = false;
+        if (message.theme !== undefined) claim.theme = message.theme;
+      }
       const creating = attachments.has(message.pane_id) ? undefined : pendingAttachments.get(message.pane_id);
       if (creating && client.data.attached.has(message.pane_id)) {
         try { await creating; } catch { return; }
@@ -427,12 +486,7 @@ export function createTerminalRegistry({ clients, stopped, terminalAttach, holdF
       claim.keepSize = true;
       const attachment = typeof message.pane_id === "string" ? attachments.get(message.pane_id) : undefined;
       if (!attachment || attachment.kind === "mirror") return;
-      attachment.grids.delete(client);
-      if (attachment.driver !== client) return;
-      attachment.driver = undefined;
-      const next = [...attachment.grids].reverse().find(([other]) => connectionOf(other).mode === "interact"
-        && attachment.clients.has(other) && other.data.attached.get(message.pane_id)?.keepSize === false);
-      if (next) drivePty(message.pane_id, next[0], next[1].cols, next[1].rows);
+      releaseDriver(message.pane_id, client, attachment);
       return;
     },
   };

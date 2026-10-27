@@ -73,6 +73,7 @@ export function createSocket({ clients, present, stopped, admit, setRole, watchP
       if (message.mode === "observe") {
         // the fresh observer needs the grid it must adopt
         for (const paneId of client.data.attached.keys()) {
+          void frames["release-size"](client, { type: "release-size", pane_id: paneId });
           const attachment = attachments.get(paneId);
           if (attachment) {
             send(client, { type: "pane-geometry", pane_id: paneId, cols: attachment.cols, rows: attachment.rows });

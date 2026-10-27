@@ -72,7 +72,9 @@ open macos/build/T-Rex.app
 ```
 
 Xcode's command line tools (Swift 6.2 or later) build `macos/`; `swift build --package-path macos`
-alone checks the Swift side. The runtimes are fetched once per machine into
+alone checks the Swift side. `swift test --package-path macos` checks that the page's theme colours
+leave WebKit following system appearance, in both directions and with an explicit opposite theme.
+The runtimes are fetched once per machine into
 `~/.cache/t-rex/downloads`, by checksum.
 
 `T_REX_URL=http://127.0.0.1:7417 macos/build/T-Rex.app/Contents/MacOS/T-Rex` opens a window on the

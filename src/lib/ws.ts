@@ -1,5 +1,6 @@
 import type { ClientMessage, ClientRole, ServerFeature, ServerMessage } from "../../shared/protocol.ts";
 import { OUTPUT_STALLED_CLOSE_CODE } from "../../shared/terminal-flow.ts";
+import type { TerminalDisplayTheme } from "../../shared/terminal-theme.ts";
 import { ConnectionTrace } from "./connectionTrace.ts";
 
 type Handler = (message: ServerMessage) => void;
@@ -101,6 +102,7 @@ function defaultUrl(): string {
  *   user reviews instead. Control frames (attach/resize/role) replay as before.
  */
 export class HerdrSocket {
+  private readonly terminalThemes = new Map<string, TerminalDisplayTheme>();
   private socket: WebSocket | null = null;
   private readonly url: string;
   private readonly handlers = new Set<Handler>();
@@ -308,7 +310,7 @@ export class HerdrSocket {
       for (const handler of this.beforeReplayHandlers) handler();
       for (const [paneId, state] of this.attached) {
         state.releaseSizeOwed = !state.keepSize;
-        this.rawSend({ type: "attach", pane_id: paneId, cols: state.cols, rows: state.rows, sync: "ssp", graphics: true, ...(state.keepSize ? { keep_size: true } : {}), ...(state.resume ? { resume: state.resume } : {}) });
+        this.rawSend({ type: "attach", pane_id: paneId, cols: state.cols, rows: state.rows, sync: "ssp", graphics: true, theme: this.terminalThemes.get(paneId), ...(state.keepSize ? { keep_size: true } : {}), ...(state.resume ? { resume: state.resume } : {}) });
       }
     });
 
@@ -657,7 +659,7 @@ export class HerdrSocket {
     this.outputSeen.delete(paneId);
     this.inputReady.delete(paneId);
     this.attached.set(paneId, { cols, rows, keepSize, releaseSizeOwed: !keepSize });
-    this.send({ type: "attach", pane_id: paneId, cols, rows, sync: "ssp", graphics: true, ...(keepSize ? { keep_size: true } : {}) });
+    this.send({ type: "attach", pane_id: paneId, cols, rows, sync: "ssp", graphics: true, theme: this.terminalThemes.get(paneId), ...(keepSize ? { keep_size: true } : {}) });
     if (this.stopped) {
       this.stopped = false;
       this.stoppedHidden = false;
@@ -723,7 +725,14 @@ export class HerdrSocket {
     state.rows = rows;
     state.keepSize = false;
     state.releaseSizeOwed = true;
-    this.send({ type: "resize", pane_id: paneId, cols, rows });
+    this.send({ type: "resize", pane_id: paneId, cols, rows, theme: this.terminalThemes.get(paneId) });
+  }
+
+  /** Palette changes are state, not input: reconnect replays the newest palette with the attach. */
+  setTerminalTheme(paneId: string, theme: TerminalDisplayTheme): void {
+    this.terminalThemes.set(paneId, theme);
+    const state = this.attached.get(paneId);
+    if (this.connected && this.mode === "interact" && state && !state.keepSize) this.resize(paneId, state.cols, state.rows, true);
   }
 
   /** Whether this connection may take a held pane from another web bridge: a server that knows how, and not observing. */

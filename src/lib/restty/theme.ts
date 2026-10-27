@@ -7,6 +7,7 @@
 import { getBuiltinTheme, isBuiltinThemeName, listBuiltinThemeNames, parseGhosttyTheme, type GhosttyTheme } from "restty";
 import type { TerminalColors } from "../themes.ts";
 import type { LIGHT_ANSI_ROLES } from "../themeRoles.ts";
+import type { TerminalDisplayTheme } from "../../../shared/terminal-theme.ts";
 
 /** Ghostty's default palette (src/terminal/color.zig), drawn where a theme row names none. */
 const GHOSTTY_ANSI = [
@@ -30,6 +31,19 @@ export function resttyTheme(colors: TerminalColors): GhosttyTheme {
     ...ANSI_ORDER.map((role, index) => `palette = ${index}=${colors[role] ?? GHOSTTY_ANSI[index]}`),
   ];
   return parseGhosttyTheme(lines.join("\n"));
+}
+
+/** The same RGBs the renderer draws, published to Herdr for application colour queries. */
+export function terminalDisplayTheme(theme: GhosttyTheme): TerminalDisplayTheme | null {
+  const { foreground, background, palette } = theme.colors;
+  if (!foreground || !background) return null;
+  const rgb = ({ r, g, b }: { r: number; g: number; b: number }) => ({ r, g, b });
+  return {
+    foreground: rgb(foreground), background: rgb(background),
+    palette: GHOSTTY_ANSI.map((hex, index) => rgb(palette[index] ?? {
+      r: parseInt(hex.slice(1, 3), 16), g: parseInt(hex.slice(3, 5), 16), b: parseInt(hex.slice(5, 7), 16),
+    })),
+  };
 }
 
 /** Ghostty's own themes, by name (Settings → Appearance → Terminal theme). */

@@ -97,6 +97,8 @@ interface AttachmentState {
  */
 export interface PtyAttachment extends AttachmentState {
   readonly kind: "pty";
+  /** Changes with the process after a live handoff. */
+  terminalId?: string;
   /** the attach the latest start made: each retry, take-over or handoff's new terminal replaces it */
   process: PtySession;
   /** a held terminal's next try takes the slot from the other bridge for this client (`take-over`) */
@@ -410,6 +412,7 @@ export function createSpawnAttachment({ attachments, retiringAttachments, termin
         };
         relookup();
       };
+      attachment.terminalId = attachedTerminal;
       const command = process.env["HERDR_WEB_HERDR_BIN"] || "herdr";
       // node-pty reports a command it cannot exec only as a silent exit 1, which reads as an
       // ended attach (#925): look it up on the PATH and from the home directory the sidecar uses.

@@ -15,6 +15,7 @@ import type {
 import type { AgentInfo, AgentManifestInfo, AgentStartParams, PaneInfo, PaneLayoutSnapshot, PaneProcessInfo, PaneScrollInfo, TabInfo, WorkspaceInfo } from "../../shared/herdr-api.generated.ts";
 import type { HerdrMethod, HerdrMethods, SingleHerdrMethod, UntypedHerdrMethod } from "./methods.ts";
 import type { HerdrIdentity } from "../../shared/machines.ts";
+import type { TerminalDisplayTheme } from "../../shared/terminal-theme.ts";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const diagnostics = new ConnectionDiagnostics("herdr.rpc");
@@ -220,6 +221,13 @@ export async function ping(socketPath?: string): Promise<HerdrIdentity> {
   const attach = terminalAttachSupported(result.capabilities);
   // without attach the web server repaints the pane's screen instead (server/mirror.ts)
   return { version: result.version, protocol: result.protocol, terminal_attach: attach, ...(attach ? {} : { terminal_mirror: true }) };
+}
+
+/** Older Herdr keeps its existing palette; no guessed terminal replies are written as input. */
+export async function terminalSetTheme(terminalId: string, theme: TerminalDisplayTheme | null, guard: () => boolean): Promise<void> {
+  const status = await herdrRpc<{ capabilities?: { terminal_theme?: boolean } }>("ping", {});
+  if (status.capabilities?.terminal_theme !== true || !guard()) return;
+  await herdrRpc("terminal.theme.set", { terminal_id: terminalId, theme }, undefined, undefined, guard);
 }
 
 export async function sessionSnapshot(socketPath?: string, timeoutMs?: number): Promise<SessionSnapshot> {

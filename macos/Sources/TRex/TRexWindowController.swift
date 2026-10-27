@@ -115,7 +115,8 @@ final class TRexWindowController: NSWindowController, NSWindowDelegate, WKNaviga
       guard let css = body["color"] as? String, let color = Theme.color(css) else { return }
       window?.backgroundColor = color
       webView.underPageBackgroundColor = color
-      window?.appearance = NSAppearance(named: (body["dark"] as? Bool ?? true) ? .darkAqua : .aqua)
+      // Keep WebKit on the system appearance; overriding the window pins prefers-color-scheme.
+      window?.standardWindowButton(.closeButton)?.superview?.appearance = NSAppearance(named: (body["dark"] as? Bool ?? true) ? .darkAqua : .aqua)
     case "ready":
       // what scripts/mac-app-smoke.ts waits for: the window shows T-Rex from this bridge
       print("T-Rex: the window shows \(webView.url?.absoluteString ?? "")")

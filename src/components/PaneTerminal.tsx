@@ -27,7 +27,7 @@ import type { PaneControls } from "../lib/actions.ts";
 import { useSettings, terminalTheme, type Palette, type ResolvedTheme } from "../lib/settings.ts";
 import { sanitizeFontFamily } from "../lib/fontFamily.ts";
 import { terminalFonts } from "../lib/restty/fonts.ts";
-import { terminalColorsTheme } from "../lib/restty/theme.ts";
+import { terminalColorsTheme, terminalDisplayTheme } from "../lib/restty/theme.ts";
 import { ResttyTerminal } from "../lib/restty/terminal.ts";
 import type { TerminalScreen } from "../lib/terminalScreen.ts";
 import { useT } from "../lib/i18n.ts";
@@ -1995,7 +1995,9 @@ export function PaneTerminal({
   const colors = useMemo(() => terminalColorsTheme(settings.terminalThemeName, terminalTheme(theme, palette)), [settings.terminalThemeName, theme, palette]);
   useEffect(() => {
     termRef.current?.setTheme(colors);
-  }, [colors]);
+    const displayTheme = terminalDisplayTheme(colors);
+    if (paneId && displayTheme) socketRef.current?.setTerminalTheme(paneId, displayTheme);
+  }, [colors, paneId]);
 
   // and the renderer's own settings: shaping across cells, and the GPU interface it draws with
   useEffect(() => { termRef.current?.setLigatures(settings.terminalLigatures); }, [settings.terminalLigatures]);

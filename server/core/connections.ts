@@ -5,6 +5,7 @@
  */
 import type { ServerWebSocket } from "bun";
 import type { ClientRole, ServerMessage } from "../../shared/protocol.ts";
+import type { TerminalDisplayTheme } from "../../shared/terminal-theme.ts";
 import { OUTPUT_STALLED_CLOSE_CODE } from "../../shared/terminal-flow.ts";
 import type { DeviceStore } from "../devices.ts";
 import { HerdrError, herdrSocketPath } from "../herdr/client.ts";
@@ -18,7 +19,7 @@ export interface SocketData {
   readOnly?: boolean;
   relay?: MachineRelay;
   /** A fresh claim per attach lifetime; deleting it invalidates queued terminal keys. */
-  attached: Map<string, { keepSize: boolean }>;
+  attached: Map<string, { keepSize: boolean; theme?: TerminalDisplayTheme }>;
   /** each attached pane's screen sync, for a client that asked for it (attach sync "ssp") */
   sync: Map<string, SyncSender>;
   /** the client's input into each pane, for its local echo (server/ssp/sync.ts) */
@@ -47,7 +48,7 @@ function stateOf(client: Client): ConnectionState {
 
 /** The data for a connection's upgrade: it starts to interact unless its access is read-only. */
 export function connectionData(fields: { relay?: MachineRelay; deviceId: string | undefined; readOnly: boolean }): SocketData {
-  const data: SocketData = { attached: new Map<string, { keepSize: boolean }>(), sync: new Map(), echo: new Map(), ...fields };
+  const data: SocketData = { attached: new Map<string, { keepSize: boolean; theme?: TerminalDisplayTheme }>(), sync: new Map(), echo: new Map(), ...fields };
   states.set(data, { closing: false, revoked: false, mode: fields.readOnly ? "observe" : "interact", roles: 0, watches: new Map<string, PaneWatch>() });
   return data;
 }

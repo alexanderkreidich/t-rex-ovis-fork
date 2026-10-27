@@ -233,6 +233,23 @@ export interface TabInfo {
   workspace_id: string;
 }
 
+export interface TerminalColor {
+  b: number;
+  g: number;
+  r: number;
+}
+
+export interface TerminalDisplayTheme {
+  background: TerminalColor;
+  foreground: TerminalColor;
+  palette: TerminalColor[];
+}
+
+export interface TerminalThemeSetParams {
+  terminal_id: string;
+  theme?: TerminalDisplayTheme | null;
+}
+
 export interface WorkspaceInfo {
   active_tab_id: string;
   agent_status: AgentStatus;

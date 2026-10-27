@@ -15,6 +15,12 @@ herdr remains authoritative, including history, selection ranges and keyboard pr
 - SSP frames paint the same native runtime as raw/watch and read-only mirrored output.
   Program modes enter restty through its PTY connection, not just a renderer write; restty's
   device replies do not bypass the bridge's authoritative query handling.
+- The active grid owner's RGB defaults and 16 ANSI colours travel with attach/resize. On a Herdr
+  advertising `terminal_theme`, the bridge publishes them through `terminal.theme.set`, so Pi's
+  `system` theme can query the actual palette and refresh on changes. Observers do not publish;
+  releasing the grid restores the next operator's palette, and detaching restores Herdr's inherited
+  host colours. Older Herdr keeps its existing behaviour without receiving an unknown method or
+  terminal replies as typing.
 - The app owns resize/fit, wheel/history navigation, drag/word selection, copy, safe HTTP(S)/OSC 8
   links, search overlays, touch/pinch and input routing. Herdr supplies authoritative selection
   text; a synchronous visible-screen fallback preserves the clipboard gesture.
@@ -54,6 +60,15 @@ bun run typecheck
 bun run test:restty
 bun run check fast
 bun run check integration
+```
+
+With a Herdr build advertising `terminal_theme`, the dedicated theme check exercises actual PTY
+queries and subscribed updates. Set `PI_THEME_QA_BIN` to also verify a real Pi UI with temporary
+configuration, no personal extensions and offline mode (no model request):
+
+```sh
+HERDR_WEB_HERDR_BIN=/path/to/theme-enabled/herdr PI_THEME_QA_BIN="$(command -v pi)" \
+  bun run check run bun scripts/terminal-theme-regression.ts
 ```
 
 `test:restty` builds once and runs 12 scripts inside one owned, isolated herdr session. It covers

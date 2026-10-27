@@ -25,6 +25,7 @@ export type {
 } from "./herdr-api.generated.ts";
 
 import type { FrameDiff } from "./ssp.ts";
+import type { TerminalDisplayTheme } from "./terminal-theme.ts";
 import type { GraphicsChunk } from "./ssp-assets.ts";
 import type { AgentStatus, PaneInfo, PaneScrollInfo, SessionSnapshot as HerdrSnapshot, TabInfo, WorkspaceInfo } from "./herdr-api.generated.ts";
 
@@ -701,7 +702,7 @@ export type ClientRole = "interact" | "observe";
 
 export type ClientMessage =
   /** keep_size: the grid is not shown here (a hidden pane, a tab out of use), so the attach leaves the shared pty's size as it is */
-  | { type: "attach"; pane_id: string; cols: number; rows: number; keep_size?: boolean; sync?: "ssp"; graphics?: boolean; resume?: { stream: string; num: number } }
+  | { type: "attach"; pane_id: string; cols: number; rows: number; keep_size?: boolean; sync?: "ssp"; graphics?: boolean; resume?: { stream: string; num: number }; theme?: TerminalDisplayTheme }
   | { type: "detach"; pane_id: string }
   /** a pane another web bridge holds (`attach_held`): take herdr's attach slot from it, here, now */
   | { type: "take-over"; pane_id: string }
@@ -715,7 +716,7 @@ export type ClientMessage =
   /** Masked input: revalidate the visible prompt, type literal bytes + Enter immediately.
    * Never queued, retried, sent through agent.prompt, or echoed in a result. */
   | { type: "secret"; id: number; pane_id: string; prompt: string; secret: string }
-  | { type: "resize"; pane_id: string; cols: number; rows: number }
+  | { type: "resize"; pane_id: string; cols: number; rows: number; theme?: TerminalDisplayTheme }
   /** this client's terminal is no longer shown: if the pty has its grid, the server sizes
    * the pty for the latest grid of another interact client still showing the terminal, or leaves it.
    * Never answered; an older server ignores it, so it needs no feature. */
